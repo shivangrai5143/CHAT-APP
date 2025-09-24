@@ -74,3 +74,27 @@
 .friends:hover span{
   color: rgb(230, 229, 238);
 }
+.ls-nav .menu{
+  position: relative;
+  padding: 10px 0px;
+}
+.menu .sub-menu{
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 130px;
+  padding: 20px;
+  border-radius: 5px;
+  background-color: rgb(241, 228, 205);
+  color: #000;
+}
+.sub-menu hr{
+  border: none;
+  height: 1px;
+  background: #a4a4a4;
+  margin: 8px 0px;
+}
+.sub-menu p{
+  cursor: pointer;
+  font-size: 14px;
+}
