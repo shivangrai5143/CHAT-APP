@@ -41,7 +41,7 @@ Authentication: Firebase Authentication (Email, Google, etc.)
 
 Styling: TailwindCSS / Material UI (based on your choice)
 
-Hosting: Firebase Hosting / Vercel / Netlify
+Hosting: Firebase Hosting / Vercel / Netlify / and other plateform
 
 📸 Screenshots
 
