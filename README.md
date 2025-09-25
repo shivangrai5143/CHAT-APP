@@ -51,7 +51,7 @@ Hosting: Firebase Hosting / Vercel / Netlify / and other plateform
 
 Push Notifications (Firebase Cloud Messaging)
 
-End-to-End Encryption
+End-to-End Encryption and provide privacy to users
 
 Voice & Video Calling
 
