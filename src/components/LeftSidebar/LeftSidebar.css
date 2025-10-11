@@ -87,6 +87,8 @@
   border-radius: 5px;
   background-color: rgb(241, 228, 205);
   color: #000;
+  display:none;
+
 }
 .sub-menu hr{
   border: none;
@@ -97,4 +99,7 @@
 .sub-menu p{
   cursor: pointer;
   font-size: 14px;
+}
+.menu:hover .sub-menu{
+  display: block;
 }

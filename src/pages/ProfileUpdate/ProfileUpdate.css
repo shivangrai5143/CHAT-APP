@@ -1,0 +1,7 @@
+.profile{
+  min-height: 10vh;
+  background: url(/background.png) no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
