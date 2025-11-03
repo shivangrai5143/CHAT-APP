@@ -10,7 +10,7 @@ const ProfileUpdate =() =>{
           <label htmlFor='avatar'>
             <input type='file' id='avatar' accept='.png,.jpeg,.jpg' hidden/>
            <img src ={assets.avatar_icon} alt=""/>
-           upload profile image
+           Upload profile image !
           </label>
           <input type='text' placeholder='Your name' required/>
           <textarea placeholder='Write profile bio!' required></textarea>
