@@ -1,7 +1,7 @@
 import React, {useState} from 'react'
 import "./login.css"
 import assets from '../../assets/assets'
-import {signup} from '../../config/firebase'
+import {signup, login} from '../../config/firebase'
 
 const Login = () => {
   
@@ -15,7 +15,9 @@ const Login = () => {
     if(currState === "Sign up"){
       signup(userName,email,password);
     }
-
+    else{
+       login(email,password);
+    }
   }
 
   return (
