@@ -1,17 +1,22 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { createUserWithEmailAndPassword, getAuth , signInWithEmailAndPassword} from "firebase/auth"; 
-import { getFirestore, setDoc, doc } from "firebase/firestore"; 
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import { getFirestore, setDoc, doc } from "firebase/firestore";
 import { toast } from "react-toastify";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBqVECzSRda8_JP6b9zRQhzHbi0Xv2zm_U",
   authDomain: "chat-app-71395.firebaseapp.com",
   projectId: "chat-app-71395",
-  storageBucket: "chat-app-71395.appspot.com", 
+  storageBucket: "chat-app-71395.appspot.com",
   messagingSenderId: "729508397283",
   appId: "1:729508397283:web:43624bbbd3a8295c71c5d6",
-  measurementId: "G-S2KNCFBBQY"
+  measurementId: "G-S2KNCFBBQY",
 };
 
 const app = initializeApp(firebaseConfig);
@@ -41,17 +46,26 @@ const signup = async (username, email, password) => {
     toast.success("Signup successful! 🎉");
   } catch (error) {
     console.error(error);
-    toast.error(error.code);
+    toast.error(error.code.split("/")[1].split("-").join(" "));
   }
-}; 
+};
 
 const login = async (email, password) => {
-   try{
-        await signInWithEmailAndPassword(auth, email, password);
-   } catch (error) {
-        console.error(error);
-        toast.error(error.code);
-   }
-}
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (error) {
+    console.error(error);
+    toast.error(error.code.split("/")[1].split("-").join(" "));
+  }
+};
 
-export { app, analytics, auth, db, signup, login };
+const logout = async () => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error(error);
+    toast.error(error.code.split("/")[1].split("-").join(" "));
+  }
+};
+
+export { app, analytics, auth, db, signup, login, logout };
