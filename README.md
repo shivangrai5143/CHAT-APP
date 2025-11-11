@@ -37,7 +37,7 @@ Frontend: React.js (with Hooks & Context/Redux)
 
 Backend: Firebase (Firestore + Realtime Database)
 
-Authentication: Firebase Authentication (Email, Google, etc.)
+Authentication: Firebase Authentication (Email, Google,Cloudinary, etc.)
 
 Styling: TailwindCSS / Material UI (based on your choice)
 
