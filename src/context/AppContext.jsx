@@ -1,19 +1,29 @@
-import { createContext } from 'react';
+import { createContext, useState } from "react";
 
-export const AppContext = createContext();
+// Always give createContext a default value (even empty object)
+export const AppContext = createContext({});
 
 const AppContextProvider = (props) => {
+  const [userData, setUserData] = useState(null);
+  const [chatData, setChatData] = useState(null);
 
-
-  const value = {
+  const loadUserData = async (uid)=>{
 
   }
+
+  const value = {
+    userData,
+    setUserData,
+    chatData,
+    setChatData,
+  };
 
   return (
     <AppContext.Provider value={value}>
       {props.children}
     </AppContext.Provider>
-  )
-}
+  );
+};
 
 export default AppContextProvider;
+export { AppContextProvider };
