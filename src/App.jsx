@@ -1,38 +1,40 @@
-import React, { useEffect } from 'react'
-import { Route, Routes , useNavigate } from 'react-router-dom'
-import Login from './pages/login/login'
-import Chat from './pages/Chat/Chat'
-import ProfileUpdate from './pages/ProfileUpdate/ProfileUpdate'
-import { ToastContainer, toast } from 'react-toastify';
+import React, { useContext, useEffect } from 'react';
+import { Route, Routes, useNavigate } from 'react-router-dom';
+import Login from './pages/login/login';
+import Chat from './pages/Chat/Chat';
+import ProfileUpdate from './pages/ProfileUpdate/ProfileUpdate';
+import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { onAuthStateChanged , getAuth } from 'firebase/auth' 
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './config/firebase';
+import { AppContext } from './context/AppContext';
 
 const App = () => {
-
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
+  const { loadUserData } = useContext(AppContext);
 
   useEffect(() => {
-    onAuthStateChanged(getAuth(), async (user)=>{
-      if(user){
-         navigate("/chat")
-         console.log(user );
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+          await loadUserData(user.uid);
+        navigate("/chat");
       }
-      else{
-        navigate("/")
+       else {
+        navigate("/");
       }
-    }) 
+    });
   }, []);
 
   return (
     <>
-    <ToastContainer/>
+      <ToastContainer />
       <Routes>
-        <Route path="/" element={<Login/>} />
-        <Route path="/chat" element={<Chat/>} />
-        <Route path="/profile" element={<ProfileUpdate/>} />
+        <Route path="/" element={<Login />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/profile" element={<ProfileUpdate />} />
       </Routes>
     </>
-  )
-}
+  );
+};
 
-export default App
+export default App;
