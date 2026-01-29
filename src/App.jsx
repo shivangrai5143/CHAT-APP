@@ -7,7 +7,8 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./config/firebase";
-import { AppContext } from "./context/AppContext";
+import { AppContext } from "./context/AppContextProvider";
+
 
 const App = () => {
   const navigate = useNavigate();
@@ -16,7 +17,6 @@ const App = () => {
   useEffect(() => {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // ONLY load user data and let context handle navigation
         await loadUserData(user.uid);
       } else {
         navigate("/");
