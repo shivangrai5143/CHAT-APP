@@ -26,6 +26,9 @@ const AppContextProvider = ({ children }) => {
         }
       }
       await updateDoc(userRef, { lastSeen: Date.now() });
+      setInterval(() => {
+        updateDoc(userRef, { lastSeen: Date.now() });
+      }, 60000);
     } catch (error) {
       console.error("Error loading user data:", error);
     }
