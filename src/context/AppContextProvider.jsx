@@ -1,14 +1,12 @@
-import { createContext, useState } from "react"; 
+import { createContext, useState } from "react"; // 1. Added createContext
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
-
 
 export const AppContext = createContext();
 
 const AppContextProvider = ({ children }) => {
   const navigate = useNavigate();
-
   const [userData, setUserData] = useState(null);
   const [chatData, setChatData] = useState(null);
 
@@ -16,27 +14,18 @@ const AppContextProvider = ({ children }) => {
     try {
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
-
+      const userData = userSnap.data();
+      setUserData(userData);
       if (userSnap.exists()) {
         const data = userSnap.data();
         setUserData(data);
-
-      
-        if (data.avatar && data.name) {
+        if (userData.avatar && userData.name) {
           navigate("/chat");
         } else {
           navigate("/profile");
         }
-        
-        // Update last seen (optional but common in chat apps)
-        await updateDoc(userRef, {
-            lastSeen: Date.now()
-        });
-
-      } else {
-        console.warn("User not found in Firestore");
-        navigate("/profile");
       }
+      await updateDoc(userRef, { lastSeen: Date.now() });
     } catch (error) {
       console.error("Error loading user data:", error);
     }
