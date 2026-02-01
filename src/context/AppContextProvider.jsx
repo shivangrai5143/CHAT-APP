@@ -1,4 +1,4 @@
-import { createContext, useState } from "react"; // 1. Added createContext
+import { createContext, useState } from "react"; 
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
