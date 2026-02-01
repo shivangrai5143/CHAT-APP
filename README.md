@@ -18,7 +18,7 @@ A full-stack real-time chat application built with React.js and Firebase Authent
 🔑 User Authentication with Firebase Auth (Email/Password, Google Sign-In, etc.)
 
 💬 One-to-One & Group Chat functionality
-
+sdfyguhijokpj;khljgfxchjklj;jkjhgfdzsdfghjk
 ⚡ Real-Time Messaging powered by Firebase Firestore
 
 👀 Online/Offline Presence tracking
