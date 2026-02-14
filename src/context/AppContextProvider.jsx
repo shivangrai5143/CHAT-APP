@@ -1,6 +1,6 @@
 import { createContext, useState } from "react"; 
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { auth, db } from "../config/cloudinary";
+import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 
 export const AppContext = createContext();

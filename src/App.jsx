@@ -22,7 +22,7 @@ const App = () => {
         navigate("/");
       }
     });
-  }, []);
+  }, [loadUserData, navigate]);
 
   return (
     <>
