@@ -7,7 +7,7 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./config/firebase";
-import { AppContext } from "./context/AppContextProvider";
+import { AppContext } from "./context/AppContextProvider";;
 
 
 const App = () => {
