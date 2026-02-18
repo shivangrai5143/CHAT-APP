@@ -8,7 +8,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./config/firebase";
 import { AppContext } from "./context/AppContextProvider";
-import cloudinary
+
 
 
 const App = () => {
