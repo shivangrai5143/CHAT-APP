@@ -9,20 +9,24 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./config/firebase";
 import { AppContext } from "./context/AppContextProvider";
 
-
 const App = () => {
+
   const navigate = useNavigate();
   const { loadUserData } = useContext(AppContext);
 
   useEffect(() => {
-    onAuthStateChanged(auth, async (user) => {
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         await loadUserData(user.uid);
       } else {
         navigate("/");
       }
     });
-  }, [loadUserData, navigate]);
+
+    return () => unsubscribe();
+
+  }, []);
 
   return (
     <>

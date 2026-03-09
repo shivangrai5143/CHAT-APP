@@ -10,7 +10,6 @@ const ProfileUpdate = () => {
   const [imageFile, setImageFile] = useState(null);
 
   const [avatarUrl, setAvatarUrl] = useState("");
-
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(false);
