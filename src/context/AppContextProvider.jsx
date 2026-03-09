@@ -30,7 +30,6 @@ const AppContextProvider = ({ children }) => {
           navigate("/profile");
         }
 
-        // Update lastSeen once when user logs in
         await updateDoc(userRef, {
           lastSeen: Date.now(),
         });
@@ -42,9 +41,6 @@ const AppContextProvider = ({ children }) => {
     }
   };
 
-  // ------------------------------------------------
-  // Update lastSeen when user closes browser
-  // ------------------------------------------------
   useEffect(() => {
 
     const handleUnload = async () => {
