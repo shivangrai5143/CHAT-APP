@@ -9,6 +9,11 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./config/firebase";
 import { AppContext } from "./context/AppContextProvider";
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> a44936b61a6b8aa74b331efbbe80f209b2f0e920
 const App = () => {
 
   const navigate = useNavigate();
