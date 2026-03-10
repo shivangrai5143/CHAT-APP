@@ -18,7 +18,7 @@ const App = () => {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        await loadUserData(user.uid);
+        await loadUserData(user.uid, true);
       } else {
         navigate("/");
       }

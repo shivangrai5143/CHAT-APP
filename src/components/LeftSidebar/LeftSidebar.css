@@ -1,25 +1,39 @@
-.ls{
+.ls {
   background: #24152e;
   color: whitesmoke;
   height: 75vh;
 }
-.ls-top{
+
+.ls-top {
   padding: 20px;
 }
-.ls-nav{
+
+.ls-nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-.ls-nav .logo{
+
+.ls-nav .logo {
   max-width: 140px;
 }
-.ls-nav .menu img{
+
+.ls-nav .menu img {
   max-height: 20px;
   opacity: 0.6;
   cursor: pointer;
-  }
-.ls-search{
+}
+
+.ls-nav .menu .user-avatar {
+  width: 32px;
+  height: 32px;
+  max-height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 1;
+}
+
+.ls-search {
   background-color: #2ac5ecb0;
   display: flex;
   align-items: center;
@@ -27,31 +41,37 @@
   padding: 10px 12px;
   margin-top: 20px;
 }
-.ls-search img{
+
+.ls-search img {
   width: 16px;
 }
-.ls-search input{
+
+.ls-search input {
   background: transparent;
   border: none;
   outline: none;
   color: whitesmoke;
   font-size: 11px;
 }
-.ls-search input::placeholder{
-  color:#c8c8c8;
+
+.ls-search input::placeholder {
+  color: #c8c8c8;
 }
-.ls-list{
+
+.ls-list {
   display: flex;
   flex-direction: column;
   height: 70%;
   overflow-y: scroll;
 }
-.friends img{
+
+.friends img {
   width: 35px;
   aspect-ratio: 1/1;
   border-radius: 50%;
 }
-.friends{
+
+.friends {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -59,26 +79,32 @@
   cursor: pointer;
   font-size: 13px;
 }
-.friends div{
+
+.friends div {
   display: flex;
   flex-direction: column;
 }
-.friends span{
-  color:#00d9ff;
+
+.friends span {
+  color: #00d9ff;
   font-size: 11px;
   font-weight: 15px;
 }
-.friends:hover{
+
+.friends:hover {
   background-color: #fd7506;
 }
-.friends:hover span{
+
+.friends:hover span {
   color: rgb(230, 229, 238);
 }
-.ls-nav .menu{
+
+.ls-nav .menu {
   position: relative;
   padding: 10px 0px;
 }
-.menu .sub-menu{
+
+.menu .sub-menu {
   position: absolute;
   top: 100%;
   right: 0;
@@ -87,19 +113,22 @@
   border-radius: 5px;
   background-color: rgb(241, 228, 205);
   color: #000;
-  display:none;
+  display: none;
 
 }
-.sub-menu hr{
+
+.sub-menu hr {
   border: none;
   height: 1px;
   background: #a4a4a4;
   margin: 8px 0px;
 }
-.sub-menu p{
+
+.sub-menu p {
   cursor: pointer;
   font-size: 14px;
 }
-.menu:hover .sub-menu{
+
+.menu:hover .sub-menu {
   display: block;
 }

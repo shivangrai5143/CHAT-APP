@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useRef, useCallback } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
@@ -9,11 +9,34 @@ const AppContextProvider = ({ children }) => {
 
   const navigate = useNavigate();
 
-  const [userData, setUserData] = useState(null);
+  const [userData, setUserDataState] = useState(null);
   const [chatData, setChatData] = useState(null);
+  const userDataRef = useRef(null);
 
-  const loadUserData = async (uid) => {
+  // Wrap setUserData to keep the ref in sync SYNCHRONOUSLY
+  const setUserData = useCallback((valueOrUpdater) => {
+    setUserDataState((prev) => {
+      const next =
+        typeof valueOrUpdater === "function"
+          ? valueOrUpdater(prev)
+          : valueOrUpdater;
+      userDataRef.current = next;            // sync ref immediately
+      return next;
+    });
+  }, []);
+
+  const loadUserData = async (uid, skipIfLoaded = false) => {
     try {
+      // Skip re-fetch if data already loaded (prevents overwriting fresh updates)
+      if (skipIfLoaded && userDataRef.current) {
+
+        if (userDataRef.current.avatar && userDataRef.current.name) {
+          navigate("/chat");
+        } else {
+          navigate("/profile");
+        }
+        return;
+      }
 
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
@@ -23,7 +46,7 @@ const AppContextProvider = ({ children }) => {
         const data = userSnap.data();
         setUserData(data);
 
-   
+
         if (data.avatar && data.name) {
           navigate("/chat");
         } else {

@@ -2,9 +2,8 @@ import React, { useEffect, useState, useContext } from "react";
 import "./ProfileUpdate.css";
 import assets from "../../assets/assets";
 import { uploadImageToCloudinary } from "../../lib/cloudinary";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
-import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { AppContext } from "../../context/AppContextProvider";
 
@@ -13,49 +12,24 @@ const ProfileUpdate = () => {
   const [imageFile, setImageFile] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const { setUserData } = useContext(AppContext);
+  const { userData, setUserData } = useContext(AppContext);
   const navigate = useNavigate();
 
-  // Load existing user data
+  // Load user data from context
   useEffect(() => {
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (!userData) return;
 
-      if (!user) return;
+    setName(userData.name || "");
+    setUsername(userData.username || "");
+    setBio(userData.bio || "");
+    setAvatarUrl(userData.avatar || "");
 
-      try {
-
-        const userDocRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(userDocRef);
-
-        if (docSnap.exists()) {
-
-          const userData = docSnap.data();
-
-          setName(userData.name || "");
-          setBio(userData.bio || "");
-
-          if (userData.avatar) {
-            setAvatarUrl(userData.avatar);
-          }
-
-          // update global user context
-          setUserData(userData);
-
-        }
-
-      } catch (error) {
-        console.log("Error fetching user:", error);
-      }
-
-    });
-
-    return () => unsubscribe();
-
-  }, [setUserData]);
+  }, [userData]);
 
 
   // Save profile
@@ -70,10 +44,11 @@ const ProfileUpdate = () => {
 
       let updatedData = {
         name,
+        username: username.toLowerCase(),
         bio
       };
 
-      // upload image if selected
+      // Upload new image if selected
       if (imageFile) {
 
         const imageUrl = await uploadImageToCloudinary(imageFile);
@@ -85,7 +60,7 @@ const ProfileUpdate = () => {
 
       await updateDoc(userRef, updatedData);
 
-      // update context immediately
+      // Update global context immediately
       setUserData(prev => ({
         ...prev,
         ...updatedData
@@ -142,6 +117,15 @@ const ProfileUpdate = () => {
             placeholder="Your name"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            required
+          />
+
+
+          <input
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
           />
 
