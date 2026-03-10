@@ -5,6 +5,7 @@ import { uploadImageToCloudinary } from "../../lib/cloudinary";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 import { AppContext } from "../../context/AppContextProvider";
 
 const ProfileUpdate = () => {
@@ -16,11 +17,13 @@ const ProfileUpdate = () => {
   const [loading, setLoading] = useState(false);
 
   const { setUserData } = useContext(AppContext);
+  const navigate = useNavigate();
 
   // Load existing user data
   useEffect(() => {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+
       if (!user) return;
 
       try {
@@ -39,19 +42,20 @@ const ProfileUpdate = () => {
             setAvatarUrl(userData.avatar);
           }
 
-          // update global context
+          // update global user context
           setUserData(userData);
+
         }
 
       } catch (error) {
         console.log("Error fetching user:", error);
       }
+
     });
 
     return () => unsubscribe();
 
   }, [setUserData]);
-
 
 
   // Save profile
@@ -69,7 +73,7 @@ const ProfileUpdate = () => {
         bio
       };
 
-      // upload image only if selected
+      // upload image if selected
       if (imageFile) {
 
         const imageUrl = await uploadImageToCloudinary(imageFile);
@@ -89,6 +93,8 @@ const ProfileUpdate = () => {
 
       alert("Profile updated successfully!");
 
+      navigate("/chat");
+
     } catch (err) {
 
       console.error(err);
@@ -101,7 +107,6 @@ const ProfileUpdate = () => {
     }
 
   };
-
 
 
   return (
@@ -140,12 +145,14 @@ const ProfileUpdate = () => {
             required
           />
 
+
           <textarea
             placeholder="Write profile bio!"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             required
           />
+
 
           <button type="submit" disabled={loading}>
             {loading ? "Saving..." : "Save"}
