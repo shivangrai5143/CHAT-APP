@@ -1,28 +1,35 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import "./ProfileUpdate.css";
 import assets from "../../assets/assets";
 import { uploadImageToCloudinary } from "../../lib/cloudinary";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { AppContext } from "../../context/AppContextProvider";
 
 const ProfileUpdate = () => {
-  const [imageFile, setImageFile] = useState(null);
 
+  const [imageFile, setImageFile] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const { setUserData } = useContext(AppContext);
+
+  // Load existing user data
   useEffect(() => {
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) return;
 
       try {
+
         const userDocRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(userDocRef);
 
         if (docSnap.exists()) {
+
           const userData = docSnap.data();
 
           setName(userData.name || "");
@@ -31,49 +38,80 @@ const ProfileUpdate = () => {
           if (userData.avatar) {
             setAvatarUrl(userData.avatar);
           }
+
+          // update global context
+          setUserData(userData);
         }
+
       } catch (error) {
         console.log("Error fetching user:", error);
       }
     });
 
     return () => unsubscribe();
-  }, []);
 
+  }, [setUserData]);
+
+
+
+  // Save profile
   const handleSubmit = async (e) => {
+
     e.preventDefault();
     if (!name || !bio) return;
 
     try {
+
       setLoading(true);
 
       let updatedData = {
         name,
-        bio,
+        bio
       };
 
+      // upload image only if selected
       if (imageFile) {
+
         const imageUrl = await uploadImageToCloudinary(imageFile);
         updatedData.avatar = imageUrl;
+
       }
 
-      await updateDoc(doc(db, "users", auth.currentUser.uid), updatedData);
+      const userRef = doc(db, "users", auth.currentUser.uid);
+
+      await updateDoc(userRef, updatedData);
+
+      // update context immediately
+      setUserData(prev => ({
+        ...prev,
+        ...updatedData
+      }));
 
       alert("Profile updated successfully!");
+
     } catch (err) {
+
       console.error(err);
       alert("Something went wrong");
+
     } finally {
+
       setLoading(false);
+
     }
+
   };
+
+
 
   return (
     <div className="profile">
       <div className="profile-container">
+
         <form onSubmit={handleSubmit}>
 
           <label htmlFor="avatar">
+
             <input
               type="file"
               id="avatar"
@@ -81,6 +119,7 @@ const ProfileUpdate = () => {
               hidden
               onChange={(e) => setImageFile(e.target.files[0])}
             />
+
             <img
               src={
                 imageFile
@@ -89,7 +128,9 @@ const ProfileUpdate = () => {
               }
               alt="profile"
             />
+
           </label>
+
 
           <input
             type="text"
@@ -109,7 +150,9 @@ const ProfileUpdate = () => {
           <button type="submit" disabled={loading}>
             {loading ? "Saving..." : "Save"}
           </button>
+
         </form>
+
 
         <img
           className="profile-pic"
@@ -120,6 +163,7 @@ const ProfileUpdate = () => {
           }
           alt="preview"
         />
+
       </div>
     </div>
   );
