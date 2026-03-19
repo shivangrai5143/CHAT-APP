@@ -1,7 +1,7 @@
 export const uploadImageToCloudinary = async (file, onProgress) => {
   const data = new FormData();
   data.append("file", file);
-  data.append("upload_preset", "Chat_images");
+  data.append("upload_preset", "Chat_Images");
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 

@@ -81,10 +81,10 @@ const ChatBox = () => {
 
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("upload_preset", "chat-app");
+      formData.append("upload_preset", "Chat_Images");
 
       const res = await fetch(
-        "https://api.cloudinary.com/v1_1/dqhjge4ng/image/upload",
+        "https://api.cloudinary.com/v1_1/du3hiflqj/image/upload",
         { method: "POST", body: formData }
       );
       const data = await res.json();
