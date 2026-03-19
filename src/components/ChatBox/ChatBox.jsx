@@ -20,6 +20,8 @@ const ChatBox = () => {
     chatUser,
     messagesId,
     messages,
+    chatType,
+    roomData,
   } = useContext(AppContext);
 
   const [input, setInput] = useState('');
@@ -39,15 +41,32 @@ const ChatBox = () => {
       const messageText = input.trim();
       setInput('');
 
-      // Add message to sub-collection
-      await addDoc(collection(db, "messages", messagesId, "messages"), {
+      const parentCollection = chatType === "room" ? "rooms" : "messages";
+
+      const msgData = {
         sId: userData.uid,
         text: messageText,
         createdAt: serverTimestamp(),
-      });
+      };
 
-      // Update lastMessage for both users' chatData
-      await updateChatData(messageText);
+      // For rooms, include sender name and avatar
+      if (chatType === "room") {
+        msgData.sName = userData.name || userData.username || 'User';
+        msgData.sAvatar = userData.avatar || '';
+      }
+
+      await addDoc(collection(db, parentCollection, messagesId, "messages"), msgData);
+
+      // Update lastMessage for 1-on-1 chats only
+      if (chatType === "user" && chatUser) {
+        await updateChatData(messageText);
+      }
+
+      // Update room's updatedAt
+      if (chatType === "room") {
+        const roomRef = doc(db, "rooms", messagesId);
+        await updateDoc(roomRef, { updatedAt: Date.now() });
+      }
 
     } catch (error) {
       console.error("Error sending message:", error);
@@ -60,7 +79,6 @@ const ChatBox = () => {
       const file = e.target.files[0];
       if (!file || !messagesId) return;
 
-      // Upload to Cloudinary
       const formData = new FormData();
       formData.append("file", file);
       formData.append("upload_preset", "chat-app");
@@ -72,14 +90,33 @@ const ChatBox = () => {
       const data = await res.json();
 
       if (data.secure_url) {
-        await addDoc(collection(db, "messages", messagesId, "messages"), {
+        const parentCollection = chatType === "room" ? "rooms" : "messages";
+
+        const msgData = {
           sId: userData.uid,
           image: data.secure_url,
           createdAt: serverTimestamp(),
-        });
+        };
 
-        await updateChatData("📷 Image");
+        if (chatType === "room") {
+          msgData.sName = userData.name || userData.username || 'User';
+          msgData.sAvatar = userData.avatar || '';
+        }
+
+        await addDoc(collection(db, parentCollection, messagesId, "messages"), msgData);
+
+        if (chatType === "user" && chatUser) {
+          await updateChatData("📷 Image");
+        }
+
+        if (chatType === "room") {
+          const roomRef = doc(db, "rooms", messagesId);
+          await updateDoc(roomRef, { updatedAt: Date.now() });
+        }
       }
+
+      // Reset file input
+      e.target.value = '';
 
     } catch (error) {
       console.error("Error sending image:", error);
@@ -89,42 +126,28 @@ const ChatBox = () => {
 
   const updateChatData = async (lastMessage) => {
     try {
-      // Update current user's chatData
       const currentChatRef = doc(db, "chats", userData.uid);
       const currentChatSnap = await getDoc(currentChatRef);
       const currentChatData = currentChatSnap.data()?.chatData || [];
 
       const updatedCurrentChat = currentChatData.map((item) => {
         if (item.rId === chatUser.uid) {
-          return {
-            ...item,
-            lastMessage,
-            updatedAt: Date.now(),
-            messageSeen: true,
-          };
+          return { ...item, lastMessage, updatedAt: Date.now(), messageSeen: true };
         }
         return item;
       });
-
       await updateDoc(currentChatRef, { chatData: updatedCurrentChat });
 
-      // Update other user's chatData
       const otherChatRef = doc(db, "chats", chatUser.uid);
       const otherChatSnap = await getDoc(otherChatRef);
       const otherChatData = otherChatSnap.data()?.chatData || [];
 
       const updatedOtherChat = otherChatData.map((item) => {
         if (item.rId === userData.uid) {
-          return {
-            ...item,
-            lastMessage,
-            updatedAt: Date.now(),
-            messageSeen: false,
-          };
+          return { ...item, lastMessage, updatedAt: Date.now(), messageSeen: false };
         }
         return item;
       });
-
       await updateDoc(otherChatRef, { chatData: updatedOtherChat });
 
     } catch (error) {
@@ -141,13 +164,13 @@ const ChatBox = () => {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      sendMessage();
-    }
+    if (e.key === 'Enter') sendMessage();
   };
 
-  // Empty state when no chat is selected
-  if (!chatUser) {
+  const isOnline = (lastSeen) => lastSeen && Date.now() - lastSeen < 70000;
+
+  // ─── Welcome state ───
+  if (!chatUser && chatType !== "room") {
     return (
       <div className='chat-box'>
         <div className="chat-welcome">
@@ -158,43 +181,73 @@ const ChatBox = () => {
     );
   }
 
+  // ─── Room header info ───
+  const headerName = chatType === "room"
+    ? roomData?.name || 'Room'
+    : (chatUser?.name || chatUser?.username || 'User');
+
+  const headerAvatar = chatType === "room"
+    ? null
+    : (chatUser?.avatar || assets.profile_img);
+
   return (
     <div className='chat-box'>
       <div className="chat-user">
-        <img src={chatUser.avatar || assets.profile_img} alt="" />
+        {chatType === "room" ? (
+          <div className="room-header-icon">👥</div>
+        ) : (
+          <img src={headerAvatar} alt="" />
+        )}
         <p>
-          {chatUser.name || chatUser.username || 'User'}
-          {chatUser.lastSeen && Date.now() - chatUser.lastSeen < 70000 && (
+          {headerName}
+          {chatType === "user" && isOnline(chatUser?.lastSeen) && (
             <img className='dot' src={assets.green_dot} alt="" />
+          )}
+          {chatType === "room" && (
+            <span className="room-member-count">
+              {roomData?.members?.length || 0} members
+            </span>
           )}
         </p>
         <img src={assets.help_icon} className='Help' alt="" />
       </div>
 
       <div className="chat-msg" ref={scrollRef}>
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={msg.sId === userData.uid ? "s-msg" : "r-msg"}
-          >
-            {msg.image ? (
-              <img className='msg-img' src={msg.image} alt="" />
-            ) : (
-              <p className="msg">{msg.text}</p>
-            )}
-            <div>
-              <img
-                src={
-                  msg.sId === userData.uid
-                    ? (userData.avatar || assets.profile_img)
-                    : (chatUser.avatar || assets.profile_img)
-                }
-                alt=""
-              />
-              <p>{formatTime(msg.createdAt)}</p>
+        {messages.map((msg) => {
+          const isSelf = msg.sId === userData.uid;
+
+          return (
+            <div
+              key={msg.id}
+              className={isSelf ? "s-msg" : "r-msg"}
+            >
+              <div className="msg-content">
+                {/* Sender name for room messages */}
+                {chatType === "room" && !isSelf && (
+                  <span className="msg-sender-name">{msg.sName || 'User'}</span>
+                )}
+                {msg.image ? (
+                  <img className='msg-img' src={msg.image} alt="" />
+                ) : (
+                  <p className="msg">{msg.text}</p>
+                )}
+              </div>
+              <div>
+                <img
+                  src={
+                    isSelf
+                      ? (userData.avatar || assets.profile_img)
+                      : chatType === "room"
+                        ? (msg.sAvatar || assets.profile_img)
+                        : (chatUser?.avatar || assets.profile_img)
+                  }
+                  alt=""
+                />
+                <p>{formatTime(msg.createdAt)}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="chat-input">

@@ -1,67 +1,205 @@
-.rs{
-  color: wheat;
-  background: #d12b68;
+.rs {
+  color: var(--rs-text);
+  background: var(--rs-bg);
   position: relative;
-  height: 75vh;
-  overflow:scroll;
+  height: 82vh;
+  overflow-y: auto;
+  border-left: 1px solid var(--rs-border);
+  transition: all 0.4s ease;
+  display: flex;
+  flex-direction: column;
 }
-.rs-profile{
-  padding-top: 60px;
+
+.rs-profile {
+  padding-top: 40px;
   text-align: center;
-  max-width: 70%;
-  margin: auto;
+  max-width: 80%;
+  margin: 0 auto;
+  flex-shrink: 0;
 }
-.rs-profile img{
-  width: 110px;
+
+.rs-profile img {
+  width: 100px;
+  height: 100px;
   aspect-ratio: 1/1;
-  border-radius: 50%;
+  border-radius: 20px;
+  object-fit: cover;
+  border: 3px solid var(--accent-glow);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
 }
-.rs-profile h3{
-  font-size: 18px;
-  font-weight: 400;
+
+.rs-profile h3 {
+  font-size: 16px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  margin: 5px 0px;
+  margin: 10px 0 2px;
 }
-.rs-profile p{
-  font-size: 10px;
-  opacity: 80%;
-  font-weight: 300;
+
+.rs-profile p {
+  font-size: 11px;
+  opacity: 0.6;
+  font-weight: 400;
+  line-height: 1.4;
 }
-.rs hr{
-  border-radius: #ffffff50;
-  margin: 15px 0px;
+
+.rs-status {
+  font-size: 11px !important;
+  margin-top: 6px;
+  opacity: 1 !important;
+  font-weight: 500 !important;
 }
+
+.rs hr {
+  border: none;
+  height: 1px;
+  background: var(--rs-border);
+  margin: 16px 0;
+}
+
+/* ─── Media Gallery ─── */
 .rs-media {
-  padding:0px 20px 88px ;
+  padding: 0 16px 16px;
   font-size: 13px;
+  font-weight: 600;
 }
-.rs-media div{
-  max-height: 180px;
-  overflow-y: scroll;
+
+.rs-media div {
+  max-height: 200px;
+  overflow-y: auto;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 5px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 10px;
 }
-.rs-media div img{
-  width: 60px;
-  border-radius: 4px;
+
+.rs-media div img {
+  width: 100%;
+  height: 65px;
+  object-fit: cover;
+  border-radius: 8px;
   cursor: pointer;
+  transition: all 0.25s ease;
 }
- .rs button{
-  position: absolute;
-  bottom: 20xp;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #077eff;
-  color: wheat;
-  border: none;
+
+.rs-media div img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.no-media {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 11px;
+  opacity: 0.4;
+  padding: 16px 0;
+  font-weight: 400;
+}
+
+/* ─── Room Icon Large ─── */
+.room-icon-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  background: var(--accent-glow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  margin: 0 auto 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+/* ─── Members List ─── */
+.rs-members {
+  padding: 0 16px 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.rs-members-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.rs-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.rs-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.rs-member:hover {
+  background: var(--ls-friend-hover);
+}
+
+.rs-member img {
+  width: 32px !important;
+  height: 32px;
+  border-radius: 10px !important;
+  object-fit: cover;
+}
+
+.rs-member div {
+  display: flex;
+  flex-direction: column;
+}
+
+.member-name {
   font-size: 12px;
-  font-weight: 300;
-  padding: 10px 65px;
-  border-radius: 90px;
+  font-weight: 500;
+}
+
+.member-status {
+  font-size: 10px;
+  opacity: 0.5;
+}
+
+.member-status.online {
+  color: var(--online-color);
+  opacity: 1;
+}
+
+/* ─── Buttons ─── */
+.rs button {
+  margin: auto 20px 20px;
+  background: var(--rs-btn-bg);
+  color: var(--rs-btn-text);
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 12px 0;
+  border-radius: 12px;
   cursor: pointer;
- }
+  transition: all 0.3s ease;
+  font-family: 'Inter', sans-serif;
+  width: calc(100% - 40px);
+  flex-shrink: 0;
+}
+
+.rs button:hover {
+  box-shadow: 0 6px 20px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.leave-btn {
+  background: var(--danger) !important;
+  color: white !important;
+}
+
+.leave-btn:hover {
+  box-shadow: 0 6px 20px rgba(239,68,68,0.3) !important;
+}
