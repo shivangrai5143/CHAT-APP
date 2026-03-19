@@ -1,5 +1,13 @@
 import { createContext, useState, useEffect, useRef, useCallback } from "react";
-import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  updateDoc,
+  collection,
+  query,
+  orderBy,
+} from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -11,6 +19,9 @@ const AppContextProvider = ({ children }) => {
 
   const [userData, setUserDataState] = useState(null);
   const [chatData, setChatData] = useState([]);
+  const [chatUser, setChatUser] = useState(null);
+  const [messagesId, setMessagesId] = useState(null);
+  const [messages, setMessages] = useState([]);
   const userDataRef = useRef(null);
 
   // Sync ref with state
@@ -74,7 +85,7 @@ const AppContextProvider = ({ children }) => {
 
   };
 
-  // Chat listener
+  // Chat list listener — listens to chats/{uid} doc for contact list
   useEffect(() => {
 
     if (!userData?.uid) return;
@@ -83,34 +94,55 @@ const AppContextProvider = ({ children }) => {
 
     const unSubscribe = onSnapshot(chatRef, async (res) => {
 
-      const chatItems = res.data()?.chats || [];
+      const chatItems = res.data()?.chatData || [];
 
       const tempData = await Promise.all(
 
         chatItems.map(async (item) => {
 
-          const userRef = doc(db, "users", item.uid);
+          const userRef = doc(db, "users", item.rId);
           const userSnap = await getDoc(userRef);
           const user = userSnap.data();
 
           return {
             ...item,
-            name: user?.name,
-            avatar: user?.avatar,
-            lastSeen: user?.lastSeen
+            userData: user,
           };
 
         })
 
       );
 
-      setChatData(tempData.sort((a, b) => b.lastSeen - a.lastSeen));
+      setChatData(tempData.sort((a, b) => b.updatedAt - a.updatedAt));
 
     });
 
     return () => unSubscribe();
 
   }, [userData]);
+
+  // Messages listener — listens to messages/{messagesId}/messages sub-collection
+  useEffect(() => {
+
+    if (!messagesId) {
+      setMessages([]);
+      return;
+    }
+
+    const msgRef = collection(db, "messages", messagesId, "messages");
+    const q = query(msgRef, orderBy("createdAt", "asc"));
+
+    const unSubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setMessages(msgs);
+    });
+
+    return () => unSubscribe();
+
+  }, [messagesId]);
 
   // Update lastSeen on tab close
   useEffect(() => {
@@ -146,7 +178,13 @@ const AppContextProvider = ({ children }) => {
     setUserData,
     chatData,
     setChatData,
-    loadUserData
+    loadUserData,
+    chatUser,
+    setChatUser,
+    messagesId,
+    setMessagesId,
+    messages,
+    setMessages,
   };
 
   return (

@@ -5,27 +5,37 @@ import { logout } from '../../config/firebase'
 import { AppContext } from '../../context/AppContextProvider'
 
 const RightSidebar = () => {
-  const { userData } = useContext(AppContext);
+  const { chatUser } = useContext(AppContext);
 
   return (
     <div className='rs'>
-      <div className="rs-profile">
-        <img src={userData?.avatar || assets.profile_img} alt="" />
-        <h3>{userData?.name || 'User'} <img src={assets.green_dot} className='dot' alt="" /></h3>
-        <p>{userData?.bio || 'Hey, There I am using chat-app'}</p>
-      </div>
-      <hr />
-      <div className="rs-media">
-        <p>Media</p>
-        <div>
-          <img src={assets.pic1} alt="" />
-          <img src={assets.pic2} alt="" />
-          <img src={assets.pic3} alt="" />
-          <img src={assets.pic4} alt="" />
-          <img src={assets.pic1} alt="" />
-          <img src={assets.pic2} alt="" />
+      {chatUser ? (
+        <>
+          <div className="rs-profile">
+            <img src={chatUser.avatar || assets.profile_img} alt="" />
+            <h3>
+              {chatUser.name || chatUser.username || 'User'}{' '}
+              {chatUser.lastSeen && Date.now() - chatUser.lastSeen < 70000 && (
+                <img src={assets.green_dot} className='dot' alt="" />
+              )}
+            </h3>
+            <p>{chatUser.bio || 'Hey, There I am using chat-app'}</p>
+          </div>
+          <hr />
+          <div className="rs-media">
+            <p>Media</p>
+            <div>
+              {/* Media images will be populated from shared images in chat */}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="rs-profile">
+          <img src={assets.logo_icon} alt="" />
+          <h3>Welcome to Chatapp</h3>
+          <p>Select a user to view their profile</p>
         </div>
-      </div>
+      )}
       <button onClick={() => logout()}>
         Logout
       </button>

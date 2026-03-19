@@ -95,8 +95,18 @@
   background-color: #fd7506;
 }
 
-.friends:hover span {
+.friends.active {
+  background-color: #fd7506;
+}
+
+.friends:hover span,
+.friends.active span {
   color: rgb(230, 229, 238);
+}
+
+.unread {
+  font-weight: 700;
+  color: #fff !important;
 }
 
 .ls-nav .menu {
