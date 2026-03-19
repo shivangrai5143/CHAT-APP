@@ -18,7 +18,7 @@ const LeftSidebar = () => {
     try {
       const input = e.target.value.trim();
 
-      // Clear results when input is empty
+  
       if (!input) {
         setSearchResults(null);
         return;
@@ -26,7 +26,7 @@ const LeftSidebar = () => {
 
       const userRef = collection(db, "users");
 
-      // Search by username (lowercase, which is how it's stored)
+      
       const q = query(
         userRef,
         where("username", ">=", input.toLowerCase()),
@@ -37,7 +37,7 @@ const LeftSidebar = () => {
 
       if (!querySnap.empty) {
         const results = querySnap.docs
-          .filter((doc) => doc.id !== userData?.id) // exclude self
+          .filter((doc) => doc.id !== userData?.id)  
           .map((doc) => ({
             id: doc.id,
             ...doc.data(),
