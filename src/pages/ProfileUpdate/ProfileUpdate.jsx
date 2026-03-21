@@ -9,7 +9,7 @@ import { AppContext } from "../../context/AppContextProvider";
 
 const ProfileUpdate = () => {
 
-  const [imageFile, setImageFile] = useState(null);;
+  const [imageFile, setImageFile] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
