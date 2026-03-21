@@ -1,5 +1,5 @@
 import React, {useState} from 'react'
-import "./login.css"
+import "./Login.css"
 import assets from '../../assets/assets'
 import {signup, login} from '../../config/firebase'
 
