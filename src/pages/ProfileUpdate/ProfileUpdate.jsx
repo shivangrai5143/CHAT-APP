@@ -19,7 +19,7 @@ const ProfileUpdate = () => {
   const { userData, setUserData } = useContext(AppContext);
   const navigate = useNavigate();
 
-  // Load user data from context
+  
   useEffect(() => {
 
     if (!userData) return;
@@ -32,7 +32,7 @@ const ProfileUpdate = () => {
   }, [userData]);
 
 
-  // Save profile
+  
   const handleSubmit = async (e) => {
 
     e.preventDefault();
