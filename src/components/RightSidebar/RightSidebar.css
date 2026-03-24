@@ -112,24 +112,123 @@
   box-shadow: 0 8px 24px rgba(0,0,0,0.1);
 }
 
-/* ─── Members List ─── */
+/* ─── Members Section ─── */
 .rs-members {
   padding: 0 16px 10px;
   flex: 1;
   min-height: 0;
 }
 
+.rs-members-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
 .rs-members-title {
   font-size: 13px;
   font-weight: 600;
-  margin-bottom: 12px;
 }
 
+.add-member-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent-glow);
+  color: var(--accent-light);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+
+.add-member-btn:hover {
+  background: var(--accent);
+  color: white;
+}
+
+/* ─── Add Member Search ─── */
+.add-member-search {
+  margin-bottom: 10px;
+}
+
+.add-member-search input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ls-border);
+  border-radius: 10px;
+  background: var(--ls-search-bg);
+  color: inherit;
+  font-size: 12px;
+  outline: none;
+  font-family: 'Inter', sans-serif;
+  transition: border-color 0.2s;
+}
+
+.add-member-search input:focus {
+  border-color: var(--accent);
+}
+
+.add-member-results {
+  margin-top: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.add-member-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.add-member-item:hover {
+  background: var(--ls-friend-hover);
+}
+
+.add-member-item img {
+  width: 28px !important;
+  height: 28px;
+  border-radius: 8px !important;
+  object-fit: cover;
+}
+
+.add-member-item span {
+  flex: 1;
+  font-size: 12px;
+}
+
+.add-member-item button {
+  padding: 3px 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.add-member-item button:hover {
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* ─── Members List ─── */
 .rs-members-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 200px;
+  gap: 4px;
+  max-height: 250px;
   overflow-y: auto;
 }
 
@@ -146,21 +245,39 @@
   background: var(--ls-friend-hover);
 }
 
-.rs-member img {
+.rs-member > img {
   width: 32px !important;
   height: 32px;
   border-radius: 10px !important;
   object-fit: cover;
+  flex-shrink: 0;
 }
 
-.rs-member div {
+.member-info {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .member-name {
   font-size: 12px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.admin-badge {
+  font-size: 9px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  padding: 1px 6px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .member-status {
@@ -173,8 +290,45 @@
   opacity: 1;
 }
 
+/* ─── Member Actions ─── */
+.member-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.rs-member:hover .member-actions {
+  opacity: 1;
+}
+
+.member-action-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--ls-search-bg);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.member-action-btn:hover {
+  background: var(--accent-glow);
+  transform: scale(1.1);
+}
+
+.member-action-btn.danger:hover {
+  background: rgba(239,68,68,0.2);
+  color: var(--danger);
+}
+
 /* ─── Buttons ─── */
-.rs button {
+.rs button:not(.add-member-btn):not(.member-action-btn):not(.add-member-item button) {
   margin: auto 20px 20px;
   background: var(--rs-btn-bg);
   color: var(--rs-btn-text);
@@ -190,7 +344,7 @@
   flex-shrink: 0;
 }
 
-.rs button:hover {
+.rs button:not(.add-member-btn):not(.member-action-btn):not(.add-member-item button):hover {
   box-shadow: 0 6px 20px var(--accent-glow);
   transform: translateY(-1px);
 }

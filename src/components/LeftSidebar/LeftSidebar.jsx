@@ -113,6 +113,17 @@ const LeftSidebar = () => {
         toast.success(`Connected with ${user.name || user.username || 'user'}!`);
       }
 
+      // Mark as seen when opening chat
+      const updatedCurrentChat = currentChatData.map((item) => {
+        if (item.rId === otherUid) {
+          return { ...item, messageSeen: true };
+        }
+        return item;
+      });
+      if (currentChatData.find((c) => c.rId === otherUid && !c.messageSeen)) {
+        await updateDoc(currentUserChatRef, { chatData: updatedCurrentChat });
+      }
+
       const otherUserRef = doc(db, "users", otherUid);
       const otherUserSnap = await getDoc(otherUserRef);
       const otherUserData = otherUserSnap.data();
@@ -165,6 +176,7 @@ const LeftSidebar = () => {
         createdAt: serverTimestamp(),
         updatedAt: Date.now(),
         members: [userData.uid],
+        admins: [userData.uid],
       });
 
       toast.success(`Room "${roomName.trim()}" created!`);
@@ -174,7 +186,7 @@ const LeftSidebar = () => {
       // Auto-select the new room
       setChatType("room");
       setChatUser(null);
-      setRoomData({ id: roomRef.id, name: roomName.trim(), members: [userData.uid] });
+      setRoomData({ id: roomRef.id, name: roomName.trim(), members: [userData.uid], admins: [userData.uid] });
       setMessagesId(roomRef.id);
 
     } catch (error) {
@@ -242,6 +254,21 @@ const LeftSidebar = () => {
   };
 
   const isOnline = (lastSeen) => lastSeen && Date.now() - lastSeen < 70000;
+
+  const formatChatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+
+    if (diff < 86400000 && date.getDate() === now.getDate()) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    if (diff < 604800000) {
+      return date.toLocaleDateString([], { weekday: 'short' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
 
   return (
     <div className='ls'>
@@ -318,7 +345,7 @@ const LeftSidebar = () => {
                       <img src={user.avatar || assets.profile_img} alt="" />
                       {isOnline(user.lastSeen) && <span className="online-dot"></span>}
                     </div>
-                    <div>
+                    <div className="friend-info">
                       <p>{user.name || user.username}</p>
                       <span>{user.bio || 'Hey there!'}</span>
                     </div>
@@ -339,11 +366,17 @@ const LeftSidebar = () => {
                       <img src={item.userData?.avatar || assets.profile_img} alt="" />
                       {isOnline(item.userData?.lastSeen) && <span className="online-dot"></span>}
                     </div>
-                    <div>
-                      <p>{item.userData?.name || item.userData?.username || 'User'}</p>
-                      <span className={!item.messageSeen ? 'unread' : ''}>
-                        {item.lastMessage || 'Start a conversation'}
-                      </span>
+                    <div className="friend-info">
+                      <div className="friend-top-row">
+                        <p>{item.userData?.name || item.userData?.username || 'User'}</p>
+                        <span className="chat-time">{formatChatTime(item.updatedAt)}</span>
+                      </div>
+                      <div className="friend-bottom-row">
+                        <span className={`last-msg ${!item.messageSeen ? 'unread' : ''}`}>
+                          {item.lastMessage || 'Start a conversation'}
+                        </span>
+                        {!item.messageSeen && <span className="unread-badge"></span>}
+                      </div>
                     </div>
                   </div>
                 ))

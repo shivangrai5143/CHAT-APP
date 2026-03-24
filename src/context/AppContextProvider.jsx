@@ -8,6 +8,8 @@ import {
   query,
   orderBy,
   where,
+  setDoc,
+  deleteField,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
@@ -26,7 +28,9 @@ const AppContextProvider = ({ children }) => {
   const [chatType, setChatType] = useState("user"); // "user" or "room"
   const [roomData, setRoomData] = useState(null);
   const [rooms, setRooms] = useState([]);
+  const [typingUsers, setTypingUsers] = useState({}); // { chatId: { uid: timestamp } }
   const userDataRef = useRef(null);
+  const tabFocusedRef = useRef(true);
 
   // Sync ref with state
   const setUserData = useCallback((valueOrUpdater) => {
@@ -67,6 +71,11 @@ const AppContextProvider = ({ children }) => {
 
         await updateDoc(userRef, { lastSeen: Date.now() });
       }
+
+      // Request notification permission
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
     } catch (error) {
       console.error("Error loading user data:", error);
     }
@@ -91,6 +100,24 @@ const AppContextProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [userData?.uid]);
 
+  // ─── Visibility change: update lastSeen on tab focus/blur ───
+  useEffect(() => {
+    if (!userData?.uid) return;
+
+    const handleVisibility = async () => {
+      tabFocusedRef.current = !document.hidden;
+      try {
+        const userRef = doc(db, "users", userData.uid);
+        await updateDoc(userRef, { lastSeen: Date.now() });
+      } catch (e) {
+        console.log("Visibility update error:", e);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [userData?.uid]);
+
   // ─── Real-time listener on chatUser's doc (for live online status) ───
   useEffect(() => {
     if (!chatUser?.uid || chatType !== "user") return;
@@ -104,6 +131,31 @@ const AppContextProvider = ({ children }) => {
 
     return () => unsub();
   }, [chatUser?.uid, chatType]);
+
+  // ─── Typing indicator listener ───
+  useEffect(() => {
+    if (!messagesId) return;
+
+    const typingRef = doc(db, "typing", messagesId);
+    const unsub = onSnapshot(typingRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        // Filter out stale typing indicators (> 4 seconds old)
+        const now = Date.now();
+        const active = {};
+        Object.entries(data).forEach(([uid, timestamp]) => {
+          if (now - timestamp < 4000) {
+            active[uid] = timestamp;
+          }
+        });
+        setTypingUsers((prev) => ({ ...prev, [messagesId]: active }));
+      } else {
+        setTypingUsers((prev) => ({ ...prev, [messagesId]: {} }));
+      }
+    });
+
+    return () => unsub();
+  }, [messagesId]);
 
   // ─── Chat list listener ───
   useEffect(() => {
@@ -164,6 +216,20 @@ const AppContextProvider = ({ children }) => {
         ...d.data(),
       }));
       setMessages(msgs);
+
+      // Browser notification for new messages when tab not focused
+      if (!tabFocusedRef.current && "Notification" in window && Notification.permission === "granted") {
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg && lastMsg.sId !== userData?.uid) {
+          const senderName = lastMsg.sName || chatUser?.name || chatUser?.username || "Someone";
+          const body = lastMsg.text || (lastMsg.image ? "📷 Image" : (lastMsg.fileName ? `📎 ${lastMsg.fileName}` : "New message"));
+          new Notification(`${senderName}`, {
+            body,
+            icon: lastMsg.sAvatar || chatUser?.avatar || "/favicon.ico",
+            tag: messagesId, // prevent duplicate notifications
+          });
+        }
+      }
     });
 
     return () => unSubscribe();
@@ -185,6 +251,29 @@ const AppContextProvider = ({ children }) => {
     return () => window.removeEventListener("beforeunload", handleUnload);
   }, []);
 
+  // ─── Typing helpers ───
+  const setTyping = async (chatId, isTyping) => {
+    if (!userData?.uid || !chatId) return;
+    try {
+      const typingRef = doc(db, "typing", chatId);
+      if (isTyping) {
+        await setDoc(typingRef, { [userData.uid]: Date.now() }, { merge: true });
+      } else {
+        await setDoc(typingRef, { [userData.uid]: deleteField() }, { merge: true });
+      }
+    } catch (e) {
+      // silently fail typing updates
+    }
+  };
+
+  const getTypingUsers = (chatId) => {
+    if (!chatId || !typingUsers[chatId]) return [];
+    const now = Date.now();
+    return Object.entries(typingUsers[chatId])
+      .filter(([uid, ts]) => uid !== userData?.uid && now - ts < 4000)
+      .map(([uid]) => uid);
+  };
+
   const value = {
     userData,
     setUserData,
@@ -203,6 +292,9 @@ const AppContextProvider = ({ children }) => {
     setRoomData,
     rooms,
     setRooms,
+    setTyping,
+    getTypingUsers,
+    tabFocusedRef,
   };
 
   return (

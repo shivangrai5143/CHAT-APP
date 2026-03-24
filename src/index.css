@@ -48,6 +48,23 @@
   --accent-glow: rgba(99,102,241,0.3);
   --online-color: #22c55e;
   --danger: #ef4444;
+
+  /* New feature vars */
+  --typing-color: #a5b4fc;
+  --receipt-sent: #6b7280;
+  --receipt-delivered: #6b7280;
+  --receipt-read: #3b82f6;
+  --search-highlight: rgba(250,204,21,0.3);
+  --search-highlight-text: #fbbf24;
+  --reaction-bg: rgba(255,255,255,0.08);
+  --reaction-bg-active: rgba(99,102,241,0.25);
+  --date-sep-bg: rgba(255,255,255,0.08);
+  --date-sep-text: #7a7a8e;
+  --file-card-bg: rgba(255,255,255,0.06);
+  --badge-bg: #ef4444;
+  --badge-text: #ffffff;
+  --modal-bg: #1a1a2e;
+  --modal-overlay: rgba(0,0,0,0.6);
 }
 
 /* ===== Dark Mode (explicit) ===== */
@@ -94,6 +111,22 @@
   --accent-glow: rgba(99,102,241,0.3);
   --online-color: #22c55e;
   --danger: #ef4444;
+
+  --typing-color: #a5b4fc;
+  --receipt-sent: #6b7280;
+  --receipt-delivered: #6b7280;
+  --receipt-read: #3b82f6;
+  --search-highlight: rgba(250,204,21,0.3);
+  --search-highlight-text: #fbbf24;
+  --reaction-bg: rgba(255,255,255,0.08);
+  --reaction-bg-active: rgba(99,102,241,0.25);
+  --date-sep-bg: rgba(255,255,255,0.08);
+  --date-sep-text: #7a7a8e;
+  --file-card-bg: rgba(255,255,255,0.06);
+  --badge-bg: #ef4444;
+  --badge-text: #ffffff;
+  --modal-bg: #1a1a2e;
+  --modal-overlay: rgba(0,0,0,0.6);
 }
 
 /* ===== Light Mode ===== */
@@ -144,6 +177,23 @@
   --accent-glow: rgba(99,102,241,0.15);
   --online-color: #22c55e;
   --danger: #ef4444;
+
+  /* New feature vars */
+  --typing-color: #6366f1;
+  --receipt-sent: #94a3b8;
+  --receipt-delivered: #94a3b8;
+  --receipt-read: #3b82f6;
+  --search-highlight: rgba(250,204,21,0.35);
+  --search-highlight-text: #b45309;
+  --reaction-bg: #f1f5f9;
+  --reaction-bg-active: rgba(99,102,241,0.15);
+  --date-sep-bg: #f1f5f9;
+  --date-sep-text: #94a3b8;
+  --file-card-bg: #f1f5f9;
+  --badge-bg: #ef4444;
+  --badge-text: #ffffff;
+  --modal-bg: #ffffff;
+  --modal-overlay: rgba(0,0,0,0.3);
 }
 
 * {

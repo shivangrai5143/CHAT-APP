@@ -3,8 +3,19 @@ import assets from '../../assets/assets'
 import './RightSidebar.css'
 import { logout } from '../../config/firebase'
 import { AppContext } from '../../context/AppContextProvider'
-import { doc, getDoc, updateDoc, arrayRemove } from 'firebase/firestore'
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  arrayRemove,
+  arrayUnion,
+  collection,
+  query,
+  where,
+  getDocs,
+} from 'firebase/firestore'
 import { db } from '../../config/firebase'
+import { toast } from 'react-toastify'
 
 const RightSidebar = () => {
   const {
@@ -20,6 +31,11 @@ const RightSidebar = () => {
   } = useContext(AppContext);
 
   const [memberDetails, setMemberDetails] = useState([]);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberSearchResults, setMemberSearchResults] = useState([]);
+
+  const isAdmin = roomData?.admins?.includes(userData?.uid);
 
   // Load room member details
   useEffect(() => {
@@ -47,12 +63,24 @@ const RightSidebar = () => {
 
   const isOnline = (lastSeen) => lastSeen && Date.now() - lastSeen < 70000;
 
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return 'Offline';
+    const diff = Date.now() - lastSeen;
+    if (diff < 70000) return 'Online';
+    if (diff < 60000) return 'Last seen just now';
+    if (diff < 3600000) return `Last seen ${Math.floor(diff / 60000)} min ago`;
+    if (diff < 86400000) return `Last seen ${Math.floor(diff / 3600000)}h ago`;
+    const d = new Date(lastSeen);
+    return `Last seen ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+  };
+
   const leaveRoom = async () => {
     if (!roomData?.id || !userData?.uid) return;
     try {
       const roomRef = doc(db, "rooms", roomData.id);
       await updateDoc(roomRef, {
         members: arrayRemove(userData.uid),
+        admins: arrayRemove(userData.uid),
       });
       setMessagesId(null);
       setChatType("user");
@@ -60,6 +88,92 @@ const RightSidebar = () => {
       setRoomData(null);
     } catch (error) {
       console.error("Error leaving room:", error);
+    }
+  };
+
+  const removeMember = async (uid) => {
+    if (!isAdmin || !roomData?.id) return;
+    try {
+      const roomRef = doc(db, "rooms", roomData.id);
+      await updateDoc(roomRef, {
+        members: arrayRemove(uid),
+        admins: arrayRemove(uid),
+      });
+      setRoomData((prev) => ({
+        ...prev,
+        members: prev.members.filter((m) => m !== uid),
+        admins: (prev.admins || []).filter((a) => a !== uid),
+      }));
+      toast.success("Member removed");
+    } catch (error) {
+      console.error("Error removing member:", error);
+      toast.error("Failed to remove member");
+    }
+  };
+
+  const toggleAdmin = async (uid) => {
+    if (!isAdmin || !roomData?.id) return;
+    try {
+      const roomRef = doc(db, "rooms", roomData.id);
+      const isTargetAdmin = roomData.admins?.includes(uid);
+      if (isTargetAdmin) {
+        await updateDoc(roomRef, { admins: arrayRemove(uid) });
+        setRoomData((prev) => ({
+          ...prev,
+          admins: (prev.admins || []).filter((a) => a !== uid),
+        }));
+        toast.success("Admin role removed");
+      } else {
+        await updateDoc(roomRef, { admins: arrayUnion(uid) });
+        setRoomData((prev) => ({
+          ...prev,
+          admins: [...(prev.admins || []), uid],
+        }));
+        toast.success("Admin role granted");
+      }
+    } catch (error) {
+      console.error("Error toggling admin:", error);
+    }
+  };
+
+  const searchUsersToAdd = async (e) => {
+    const input = e.target.value.trim();
+    setMemberSearch(input);
+    if (!input) { setMemberSearchResults([]); return; }
+
+    try {
+      const userRef = collection(db, "users");
+      const q = query(
+        userRef,
+        where("username", ">=", input.toLowerCase()),
+        where("username", "<=", input.toLowerCase() + '\uf8ff')
+      );
+      const snap = await getDocs(q);
+      const results = snap.docs
+        .filter((d) => !roomData?.members?.includes(d.id))
+        .map((d) => ({ uid: d.id, ...d.data() }));
+      setMemberSearchResults(results);
+    } catch (error) {
+      console.error("Search error:", error);
+    }
+  };
+
+  const addMemberToRoom = async (uid) => {
+    if (!roomData?.id) return;
+    try {
+      const roomRef = doc(db, "rooms", roomData.id);
+      await updateDoc(roomRef, {
+        members: arrayUnion(uid),
+      });
+      setRoomData((prev) => ({
+        ...prev,
+        members: [...(prev.members || []), uid],
+      }));
+      setMemberSearchResults((prev) => prev.filter((u) => u.uid !== uid));
+      toast.success("Member added!");
+    } catch (error) {
+      console.error("Error adding member:", error);
+      toast.error("Failed to add member");
     }
   };
 
@@ -73,25 +187,85 @@ const RightSidebar = () => {
           <p>{roomData.members?.length || 0} members</p>
         </div>
         <hr />
+
+        {/* Members Section */}
         <div className="rs-members">
-          <p className="rs-members-title">Members</p>
-          <div className="rs-members-list">
-            {memberDetails.map((member) => (
-              <div key={member.uid} className="rs-member">
-                <img src={member.avatar || assets.profile_img} alt="" />
-                <div>
-                  <span className="member-name">
-                    {member.name || member.username || 'User'}
-                    {member.uid === userData.uid && ' (You)'}
-                  </span>
-                  <span className={`member-status ${isOnline(member.lastSeen) ? 'online' : ''}`}>
-                    {isOnline(member.lastSeen) ? '● Online' : '○ Offline'}
-                  </span>
+          <div className="rs-members-header">
+            <p className="rs-members-title">Members</p>
+            {isAdmin && (
+              <button className="add-member-btn" onClick={() => setShowAddMember(!showAddMember)} title="Add member">
+                {showAddMember ? '✕' : '＋'}
+              </button>
+            )}
+          </div>
+
+          {/* Add Member Search */}
+          {showAddMember && isAdmin && (
+            <div className="add-member-search">
+              <input
+                type="text"
+                placeholder="Search username..."
+                value={memberSearch}
+                onChange={searchUsersToAdd}
+                autoFocus
+              />
+              {memberSearchResults.length > 0 && (
+                <div className="add-member-results">
+                  {memberSearchResults.map((user) => (
+                    <div key={user.uid} className="add-member-item" onClick={() => addMemberToRoom(user.uid)}>
+                      <img src={user.avatar || assets.profile_img} alt="" />
+                      <span>{user.name || user.username || 'User'}</span>
+                      <button>Add</button>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
+          )}
+
+          <div className="rs-members-list">
+            {memberDetails.map((member) => {
+              const isMemberAdmin = roomData.admins?.includes(member.uid);
+              const isSelf = member.uid === userData.uid;
+
+              return (
+                <div key={member.uid} className="rs-member">
+                  <img src={member.avatar || assets.profile_img} alt="" />
+                  <div className="member-info">
+                    <span className="member-name">
+                      {member.name || member.username || 'User'}
+                      {isSelf && ' (You)'}
+                      {isMemberAdmin && <span className="admin-badge">Admin</span>}
+                    </span>
+                    <span className={`member-status ${isOnline(member.lastSeen) ? 'online' : ''}`}>
+                      {isOnline(member.lastSeen) ? '● Online' : formatLastSeen(member.lastSeen)}
+                    </span>
+                  </div>
+                  {/* Admin actions */}
+                  {isAdmin && !isSelf && (
+                    <div className="member-actions">
+                      <button
+                        className="member-action-btn"
+                        onClick={() => toggleAdmin(member.uid)}
+                        title={isMemberAdmin ? 'Remove admin' : 'Make admin'}
+                      >
+                        {isMemberAdmin ? '👑' : '⭐'}
+                      </button>
+                      <button
+                        className="member-action-btn danger"
+                        onClick={() => removeMember(member.uid)}
+                        title="Remove member"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
+
         {mediaImages.length > 0 && (
           <>
             <hr />
@@ -131,7 +305,10 @@ const RightSidebar = () => {
           </h3>
           <p>{chatUser.bio || 'Hey, There I am using chat-app'}</p>
           <p className="rs-status">
-            {isOnline(chatUser.lastSeen) ? '🟢 Online' : '⚪ Offline'}
+            {isOnline(chatUser.lastSeen)
+              ? '🟢 Online'
+              : `⚪ ${formatLastSeen(chatUser.lastSeen)}`
+            }
           </p>
         </div>
         <hr />
