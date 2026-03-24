@@ -50,6 +50,18 @@ const LeftSidebar = () => {
     return saved ? saved === 'dark' : true;
   });
 
+  const [accent, setAccent] = useState(() => {
+    return localStorage.getItem('accent') || '';
+  });
+
+  const ACCENT_OPTIONS = [
+    { id: '', label: 'Default', color: '#6366f1' },
+    { id: 'ocean', label: 'Ocean', color: '#0ea5e9' },
+    { id: 'emerald', label: 'Emerald', color: '#10b981' },
+    { id: 'rose', label: 'Rose', color: '#f43f5e' },
+    { id: 'amber', label: 'Amber', color: '#f59e0b' },
+  ];
+
   const toggleTheme = () => {
     const newTheme = isDark ? 'light' : 'dark';
     setIsDark(!isDark);
@@ -57,9 +69,23 @@ const LeftSidebar = () => {
     localStorage.setItem('theme', newTheme);
   };
 
+  const setAccentColor = (id) => {
+    setAccent(id);
+    if (id) {
+      document.documentElement.setAttribute('data-accent', id);
+    } else {
+      document.documentElement.removeAttribute('data-accent');
+    }
+    localStorage.setItem('accent', id);
+  };
+
   React.useEffect(() => {
     const saved = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', saved);
+    const savedAccent = localStorage.getItem('accent');
+    if (savedAccent) {
+      document.documentElement.setAttribute('data-accent', savedAccent);
+    }
   }, []);
 
   // ─── 1-on-1 Chat Helpers ───
@@ -289,6 +315,19 @@ const LeftSidebar = () => {
               />
               <div className="sub-menu">
                 <p onClick={() => navigate('/profile')}>Edit Profile</p>
+                <hr />
+                <p className="sub-menu-label">Theme Colors</p>
+                <div className="accent-picker">
+                  {ACCENT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      className={`accent-swatch ${accent === opt.id ? 'active' : ''}`}
+                      style={{ background: opt.color }}
+                      onClick={() => setAccentColor(opt.id)}
+                      title={opt.label}
+                    />
+                  ))}
+                </div>
                 <hr />
                 <p onClick={() => logout()}>Logout</p>
               </div>

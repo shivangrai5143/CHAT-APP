@@ -1,7 +1,7 @@
 .ls {
   background: var(--ls-bg);
   color: var(--ls-text);
-  height: 82vh;
+  height: 90vh;
   border-right: 1px solid var(--ls-border);
   transition: all 0.4s ease;
   display: flex;
@@ -447,4 +447,41 @@
 
 .menu:hover .sub-menu {
   display: block;
+}
+
+/* ─── Accent Picker in Menu ─── */
+.sub-menu-label {
+  font-size: 11px;
+  opacity: 0.5;
+  padding: 4px 8px 2px;
+  cursor: default !important;
+}
+
+.sub-menu-label:hover {
+  background: transparent !important;
+}
+
+.accent-picker {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.accent-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.accent-swatch:hover {
+  transform: scale(1.15);
+}
+
+.accent-swatch.active {
+  border-color: var(--ls-text);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }

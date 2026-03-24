@@ -2,7 +2,7 @@
   color: var(--rs-text);
   background: var(--rs-bg);
   position: relative;
-  height: 82vh;
+  height: 90vh;
   overflow-y: auto;
   border-left: 1px solid var(--rs-border);
   transition: all 0.4s ease;
@@ -328,7 +328,7 @@
 }
 
 /* ─── Buttons ─── */
-.rs button:not(.add-member-btn):not(.member-action-btn):not(.add-member-item button) {
+.rs button:not(.add-member-btn):not(.member-action-btn):not(.add-member-item button):not(.action-btn):not(.report-cancel):not(.report-submit) {
   margin: auto 20px 20px;
   background: var(--rs-btn-bg);
   color: var(--rs-btn-text);
@@ -344,7 +344,7 @@
   flex-shrink: 0;
 }
 
-.rs button:not(.add-member-btn):not(.member-action-btn):not(.add-member-item button):hover {
+.rs button:not(.add-member-btn):not(.member-action-btn):not(.add-member-item button):not(.action-btn):not(.report-cancel):not(.report-submit):hover {
   box-shadow: 0 6px 20px var(--accent-glow);
   transform: translateY(-1px);
 }
@@ -356,4 +356,172 @@
 
 .leave-btn:hover {
   box-shadow: 0 6px 20px rgba(239,68,68,0.3) !important;
+}
+
+/* ─── Action Buttons (Block/Report) ─── */
+.rs-actions {
+  padding: 0 20px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-btn {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--ls-border);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  transition: all 0.2s;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.action-btn:hover {
+  background: var(--ls-friend-hover);
+}
+
+.action-btn.block {
+  color: var(--danger);
+  border-color: rgba(239,68,68,0.3);
+}
+
+.action-btn.block:hover {
+  background: rgba(239,68,68,0.08);
+}
+
+.action-btn.unblock {
+  color: var(--online-color);
+  border-color: rgba(34,197,94,0.3);
+}
+
+.action-btn.unblock:hover {
+  background: rgba(34,197,94,0.08);
+}
+
+.action-btn.report {
+  color: var(--cb-time-text);
+}
+
+/* ─── Report Modal ─── */
+.report-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--modal-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.report-modal {
+  background: var(--modal-bg);
+  border: 1px solid var(--ls-border);
+  border-radius: 16px;
+  padding: 24px;
+  width: 340px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  animation: modalPop 0.2s ease;
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.report-modal h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--rs-text);
+}
+
+.report-subtitle {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.report-modal label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: block;
+  margin-bottom: 6px;
+  margin-top: 12px;
+  opacity: 0.6;
+  color: var(--rs-text);
+}
+
+.report-modal select,
+.report-modal textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ls-border);
+  border-radius: 10px;
+  background: var(--ls-search-bg);
+  color: var(--rs-text);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  resize: none;
+}
+
+.report-modal select:focus,
+.report-modal textarea:focus {
+  border-color: var(--accent);
+}
+
+.report-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.report-cancel,
+.report-submit {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.report-cancel {
+  background: var(--ls-search-bg);
+  color: inherit;
+}
+
+.report-cancel:hover {
+  background: var(--ls-friend-hover);
+}
+
+.report-submit {
+  background: var(--danger);
+  color: white;
+}
+
+.report-submit:hover {
+  box-shadow: 0 4px 16px rgba(239,68,68,0.3);
 }

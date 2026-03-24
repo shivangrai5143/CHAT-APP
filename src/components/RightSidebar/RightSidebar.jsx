@@ -17,6 +17,8 @@ import {
 import { db } from '../../config/firebase'
 import { toast } from 'react-toastify'
 
+const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate Content', 'Impersonation', 'Other'];
+
 const RightSidebar = () => {
   const {
     chatUser,
@@ -28,12 +30,20 @@ const RightSidebar = () => {
     setChatUser,
     setChatType,
     setRoomData,
+    blockUser,
+    unblockUser,
+    isBlocked,
+    isBlockedBy,
+    reportUser,
   } = useContext(AppContext);
 
   const [memberDetails, setMemberDetails] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [memberSearchResults, setMemberSearchResults] = useState([]);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
 
   const isAdmin = roomData?.admins?.includes(userData?.uid);
 
@@ -58,7 +68,6 @@ const RightSidebar = () => {
     loadMembers();
   }, [roomData?.members, chatType]);
 
-  // Extract images from messages for media gallery
   const mediaImages = messages.filter((msg) => msg.image);
 
   const isOnline = (lastSeen) => lastSeen && Date.now() - lastSeen < 70000;
@@ -177,6 +186,30 @@ const RightSidebar = () => {
     }
   };
 
+  // ─── Block / Report handlers ───
+  const handleBlock = async () => {
+    if (!chatUser?.uid) return;
+    if (isBlocked(chatUser.uid)) {
+      await unblockUser(chatUser.uid);
+      toast.success("User unblocked");
+    } else {
+      await blockUser(chatUser.uid);
+      toast.success("User blocked");
+    }
+  };
+
+  const handleReport = async () => {
+    if (!reportReason) {
+      toast.error("Please select a reason");
+      return;
+    }
+    await reportUser(chatUser.uid, reportReason, reportDescription);
+    toast.success("Report submitted. We'll review it shortly.");
+    setShowReportModal(false);
+    setReportReason('');
+    setReportDescription('');
+  };
+
   // Room view
   if (chatType === "room" && roomData) {
     return (
@@ -188,7 +221,6 @@ const RightSidebar = () => {
         </div>
         <hr />
 
-        {/* Members Section */}
         <div className="rs-members">
           <div className="rs-members-header">
             <p className="rs-members-title">Members</p>
@@ -199,7 +231,6 @@ const RightSidebar = () => {
             )}
           </div>
 
-          {/* Add Member Search */}
           {showAddMember && isAdmin && (
             <div className="add-member-search">
               <input
@@ -241,7 +272,6 @@ const RightSidebar = () => {
                       {isOnline(member.lastSeen) ? '● Online' : formatLastSeen(member.lastSeen)}
                     </span>
                   </div>
-                  {/* Admin actions */}
                   {isAdmin && !isSelf && (
                     <div className="member-actions">
                       <button
@@ -255,9 +285,7 @@ const RightSidebar = () => {
                         className="member-action-btn danger"
                         onClick={() => removeMember(member.uid)}
                         title="Remove member"
-                      >
-                        ✕
-                      </button>
+                      >✕</button>
                     </div>
                   )}
                 </div>
@@ -273,26 +301,21 @@ const RightSidebar = () => {
               <p>Media</p>
               <div>
                 {mediaImages.map((msg) => (
-                  <img
-                    key={msg.id}
-                    src={msg.image}
-                    alt=""
-                    onClick={() => window.open(msg.image, '_blank')}
-                  />
+                  <img key={msg.id} src={msg.image} alt="" onClick={() => window.open(msg.image, '_blank')} />
                 ))}
               </div>
             </div>
           </>
         )}
-        <button className="leave-btn" onClick={leaveRoom}>
-          Leave Room
-        </button>
+        <button className="leave-btn" onClick={leaveRoom}>Leave Room</button>
       </div>
     );
   }
 
   // 1-on-1 chat view
   if (chatUser) {
+    const blocked = isBlocked(chatUser.uid);
+
     return (
       <div className='rs'>
         <div className="rs-profile">
@@ -317,21 +340,61 @@ const RightSidebar = () => {
           <div>
             {mediaImages.length > 0 ? (
               mediaImages.map((msg) => (
-                <img
-                  key={msg.id}
-                  src={msg.image}
-                  alt=""
-                  onClick={() => window.open(msg.image, '_blank')}
-                />
+                <img key={msg.id} src={msg.image} alt="" onClick={() => window.open(msg.image, '_blank')} />
               ))
             ) : (
               <p className="no-media">No shared media yet</p>
             )}
           </div>
         </div>
-        <button onClick={() => logout()}>
-          Logout
-        </button>
+
+        {/* Action Buttons */}
+        <div className="rs-actions">
+          <button className={`action-btn ${blocked ? 'unblock' : 'block'}`} onClick={handleBlock}>
+            {blocked ? '✅ Unblock User' : '🚫 Block User'}
+          </button>
+          <button className="action-btn report" onClick={() => setShowReportModal(true)}>
+            ⚠️ Report User
+          </button>
+        </div>
+
+        <button onClick={() => logout()}>Logout</button>
+
+        {/* Report Modal */}
+        {showReportModal && (
+          <div className="report-overlay" onClick={() => setShowReportModal(false)}>
+            <div className="report-modal" onClick={(e) => e.stopPropagation()}>
+              <h4>Report User</h4>
+              <p className="report-subtitle">
+                Report {chatUser.name || chatUser.username || 'this user'} for inappropriate behavior
+              </p>
+
+              <label>Reason</label>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+              >
+                <option value="">Select a reason...</option>
+                {REPORT_REASONS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+
+              <label>Description (optional)</label>
+              <textarea
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                placeholder="Describe the issue..."
+                rows={3}
+              />
+
+              <div className="report-actions">
+                <button className="report-cancel" onClick={() => setShowReportModal(false)}>Cancel</button>
+                <button className="report-submit" onClick={handleReport}>Submit Report</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -344,9 +407,7 @@ const RightSidebar = () => {
         <h3>Welcome to Chatapp</h3>
         <p>Select a user or room to get started</p>
       </div>
-      <button onClick={() => logout()}>
-        Logout
-      </button>
+      <button onClick={() => logout()}>Logout</button>
     </div>
   );
 }

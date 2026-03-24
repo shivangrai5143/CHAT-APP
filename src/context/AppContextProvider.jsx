@@ -10,6 +10,10 @@ import {
   where,
   setDoc,
   deleteField,
+  arrayUnion,
+  arrayRemove,
+  addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
@@ -274,6 +278,59 @@ const AppContextProvider = ({ children }) => {
       .map(([uid]) => uid);
   };
 
+  // ─── Block / Unblock helpers ───
+  const blockUser = async (uid) => {
+    if (!userData?.uid || !uid) return;
+    try {
+      const userRef = doc(db, "users", userData.uid);
+      await updateDoc(userRef, { blockedUsers: arrayUnion(uid) });
+      setUserData((prev) => ({
+        ...prev,
+        blockedUsers: [...(prev.blockedUsers || []), uid],
+      }));
+    } catch (e) {
+      console.error("Block error:", e);
+    }
+  };
+
+  const unblockUser = async (uid) => {
+    if (!userData?.uid || !uid) return;
+    try {
+      const userRef = doc(db, "users", userData.uid);
+      await updateDoc(userRef, { blockedUsers: arrayRemove(uid) });
+      setUserData((prev) => ({
+        ...prev,
+        blockedUsers: (prev.blockedUsers || []).filter((id) => id !== uid),
+      }));
+    } catch (e) {
+      console.error("Unblock error:", e);
+    }
+  };
+
+  const isBlocked = (uid) => {
+    return (userData?.blockedUsers || []).includes(uid);
+  };
+
+  const isBlockedBy = (otherUser) => {
+    return (otherUser?.blockedUsers || []).includes(userData?.uid);
+  };
+
+  // ─── Report user helper ───
+  const reportUser = async (uid, reason, description) => {
+    if (!userData?.uid || !uid) return;
+    try {
+      await addDoc(collection(db, "reports"), {
+        reporterUid: userData.uid,
+        reportedUid: uid,
+        reason,
+        description: description || '',
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error("Report error:", e);
+    }
+  };
+
   const value = {
     userData,
     setUserData,
@@ -295,6 +352,11 @@ const AppContextProvider = ({ children }) => {
     setTyping,
     getTypingUsers,
     tabFocusedRef,
+    blockUser,
+    unblockUser,
+    isBlocked,
+    isBlockedBy,
+    reportUser,
   };
 
   return (

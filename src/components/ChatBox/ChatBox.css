@@ -1,5 +1,5 @@
 .chat-box {
-  height: 82vh;
+  height: 90vh;
   position: relative;
   background-color: var(--cb-bg);
   transition: background-color 0.4s ease;
@@ -61,7 +61,7 @@
   gap: 8px;
 }
 
-.search-toggle {
+.header-action-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -73,7 +73,7 @@
   line-height: 1;
 }
 
-.search-toggle:hover, .search-toggle.active {
+.header-action-btn:hover, .header-action-btn.active {
   opacity: 1;
   background: var(--accent-glow);
 }
@@ -266,27 +266,27 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  max-width: 300px;
+  max-width: 340px;
 }
 
 .msg {
   color: var(--cb-msg-text);
   background: var(--cb-msg-bg);
-  padding: 10px 14px;
-  font-size: 13px;
+  padding: 10px 16px;
+  font-size: 13.5px;
   font-weight: 400;
-  line-height: 1.5;
-  border-radius: 16px 16px 4px 16px;
+  line-height: 1.55;
+  border-radius: 18px 18px 4px 18px;
   margin-bottom: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
   word-wrap: break-word;
 }
 
 .r-msg .msg {
-  border-radius: 16px 16px 16px 4px;
+  border-radius: 18px 18px 18px 4px;
   background: var(--cb-rmsg-bg);
   color: var(--cb-rmsg-text);
-  box-shadow: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 /* Sender name for room messages */
@@ -641,4 +641,112 @@
   text-align: center;
   max-width: 220px;
   line-height: 1.5;
+}
+
+/* ─── Date Input in Search ─── */
+.search-date-input {
+  border: 1px solid var(--ls-border);
+  background: var(--ls-search-bg);
+  color: var(--cb-user-text);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  max-width: 130px;
+}
+
+.search-date-input:focus {
+  border-color: var(--accent);
+}
+
+.date-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--cb-user-text);
+  font-size: 12px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  padding: 2px 4px;
+}
+
+.date-clear:hover {
+  opacity: 1;
+}
+
+/* ─── Wallpaper Picker ─── */
+.wallpaper-wrapper {
+  position: relative;
+}
+
+.wallpaper-picker {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--modal-bg);
+  border: 1px solid var(--ls-border);
+  border-radius: 14px;
+  padding: 12px;
+  width: 220px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  z-index: 15;
+  animation: slideDown 0.2s ease;
+}
+
+.wallpaper-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--cb-user-text);
+}
+
+.wallpaper-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.wallpaper-tile {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 2px solid var(--ls-border);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  background: var(--cb-bg);
+}
+
+.wallpaper-tile:hover {
+  transform: scale(1.08);
+  border-color: var(--accent-light);
+}
+
+.wallpaper-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.custom-upload {
+  cursor: pointer;
+  background: var(--ls-search-bg);
+}
+
+/* ─── Blocked Banner ─── */
+.blocked-banner {
+  padding: 14px 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--danger);
+  background: rgba(239,68,68,0.08);
+  border-top: 1px solid rgba(239,68,68,0.2);
+  font-weight: 500;
+  flex-shrink: 0;
 }
