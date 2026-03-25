@@ -8,9 +8,12 @@ import {
   addDoc,
   updateDoc,
   getDoc,
+  getDocs,
   serverTimestamp,
   Timestamp,
   writeBatch,
+  query,
+  orderBy,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { toast } from 'react-toastify';
@@ -26,6 +29,14 @@ const WALLPAPERS = [
   { id: 'gradient4', label: 'Rose', style: { background: 'linear-gradient(135deg, #f43f5e22, #ec489922)' } },
   { id: 'gradient5', label: 'Amber', style: { background: 'linear-gradient(135deg, #f59e0b22, #ea580c22)' } },
   { id: 'pattern', label: 'Dots', style: { backgroundImage: 'radial-gradient(circle, var(--accent-glow) 1px, transparent 1px)', backgroundSize: '20px 20px' } },
+];
+
+const ACCENT_OPTIONS = [
+  { id: '', label: 'Default', color: '#6366f1' },
+  { id: 'ocean', label: 'Ocean', color: '#0ea5e9' },
+  { id: 'emerald', label: 'Emerald', color: '#10b981' },
+  { id: 'rose', label: 'Rose', color: '#f43f5e' },
+  { id: 'amber', label: 'Amber', color: '#f59e0b' },
 ];
 
 const ChatBox = () => {
@@ -56,10 +67,24 @@ const ChatBox = () => {
   const [customWallpaperUrl, setCustomWallpaperUrl] = useState(() => {
     return localStorage.getItem('chatWallpaperCustomUrl') || '';
   });
+
+  // Options menu state
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [optionsSubMenu, setOptionsSubMenu] = useState(null); // 'theme' | 'wallpaper' | null
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved ? saved === 'dark' : true;
+  });
+  const [accent, setAccent] = useState(() => {
+    return localStorage.getItem('accent') || '';
+  });
+
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const emojiRef = useRef(null);
   const wallpaperRef = useRef(null);
+  const optionsRef = useRef(null);
   const msgRefs = useRef({});
 
   // Auto-scroll to bottom when messages change
@@ -85,6 +110,18 @@ const ChatBox = () => {
     const handleClick = (e) => {
       if (wallpaperRef.current && !wallpaperRef.current.contains(e.target)) {
         setShowWallpaperPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // Close options menu on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (optionsRef.current && !optionsRef.current.contains(e.target)) {
+        setShowOptionsMenu(false);
+        setOptionsSubMenu(null);
       }
     };
     document.addEventListener('mousedown', handleClick);
@@ -406,6 +443,49 @@ const ChatBox = () => {
     return wp ? wp.style : {};
   };
 
+  // ─── Theme helpers ───
+  const toggleTheme = () => {
+    const newTheme = isDark ? 'light' : 'dark';
+    setIsDark(!isDark);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+  };
+
+  const setAccentColor = (id) => {
+    setAccent(id);
+    if (id) {
+      document.documentElement.setAttribute('data-accent', id);
+    } else {
+      document.documentElement.removeAttribute('data-accent');
+    }
+    localStorage.setItem('accent', id);
+  };
+
+  // ─── Clear Chat ───
+  const clearChat = async () => {
+    if (!messagesId) return;
+    try {
+      const parentCollection = chatType === "room" ? "rooms" : "messages";
+      const msgRef = collection(db, parentCollection, messagesId, "messages");
+      const q = query(msgRef, orderBy("createdAt", "asc"));
+      const snapshot = await getDocs(q);
+
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((d) => {
+        batch.delete(d.ref);
+      });
+      await batch.commit();
+
+      setShowClearConfirm(false);
+      setShowOptionsMenu(false);
+      setOptionsSubMenu(null);
+      toast.success('Chat cleared successfully');
+    } catch (error) {
+      console.error('Error clearing chat:', error);
+      toast.error('Failed to clear chat');
+    }
+  };
+
   // ─── Search logic (text + date) ───
   const getMessageDate = (msg) => {
     if (!msg.createdAt) return null;
@@ -532,41 +612,109 @@ const ChatBox = () => {
           )}
         </div>
         <div className="chat-header-actions">
-          <button
-            className={`header-action-btn ${showSearch ? 'active' : ''}`}
-            onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); setSearchDate(''); setSearchIndex(0); }}
-            title="Search messages"
-          >🔍</button>
-          <div className="wallpaper-wrapper" ref={wallpaperRef}>
+          <div className="options-menu-wrapper" ref={optionsRef}>
             <button
-              className={`header-action-btn ${showWallpaperPicker ? 'active' : ''}`}
-              onClick={() => setShowWallpaperPicker(!showWallpaperPicker)}
-              title="Change wallpaper"
-            >🖼️</button>
-            {showWallpaperPicker && (
-              <div className="wallpaper-picker">
-                <p className="wallpaper-title">Chat Wallpaper</p>
-                <div className="wallpaper-grid">
-                  {WALLPAPERS.map((wp) => (
-                    <button
-                      key={wp.id}
-                      className={`wallpaper-tile ${wallpaper === wp.id ? 'active' : ''}`}
-                      onClick={() => selectWallpaper(wp.id)}
-                      style={wp.style}
-                      title={wp.label}
-                    >
-                      {wp.id === 'none' && '✕'}
-                    </button>
-                  ))}
-                  <label className={`wallpaper-tile custom-upload ${wallpaper === 'custom' ? 'active' : ''}`} title="Upload image">
-                    📷
-                    <input type="file" accept="image/*" hidden onChange={handleCustomWallpaper} />
-                  </label>
-                </div>
+              className={`header-action-btn options-btn ${showOptionsMenu ? 'active' : ''}`}
+              onClick={() => { setShowOptionsMenu(!showOptionsMenu); setOptionsSubMenu(null); }}
+              title="Options"
+            >⋮</button>
+            {showOptionsMenu && (
+              <div className="options-dropdown">
+                {/* ─── Change Theme ─── */}
+                <button
+                  className={`options-item ${optionsSubMenu === 'theme' ? 'expanded' : ''}`}
+                  onClick={() => setOptionsSubMenu(optionsSubMenu === 'theme' ? null : 'theme')}
+                >
+                  <span className="options-icon">🎨</span>
+                  <span>Change Theme</span>
+                  <span className="options-chevron">{optionsSubMenu === 'theme' ? '▾' : '▸'}</span>
+                </button>
+                {optionsSubMenu === 'theme' && (
+                  <div className="options-submenu theme-panel">
+                    <div className="theme-toggle-row">
+                      <span>{isDark ? '🌙 Dark' : '☀️ Light'}</span>
+                      <button className="theme-switch" onClick={toggleTheme}>
+                        <span className={`theme-switch-track ${isDark ? 'dark' : 'light'}`}>
+                          <span className="theme-switch-thumb" />
+                        </span>
+                      </button>
+                    </div>
+                    <div className="accent-row">
+                      {ACCENT_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          className={`accent-dot ${accent === opt.id ? 'active' : ''}`}
+                          style={{ background: opt.color }}
+                          onClick={() => setAccentColor(opt.id)}
+                          title={opt.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── Change Wallpaper ─── */}
+                <button
+                  className={`options-item ${optionsSubMenu === 'wallpaper' ? 'expanded' : ''}`}
+                  onClick={() => setOptionsSubMenu(optionsSubMenu === 'wallpaper' ? null : 'wallpaper')}
+                >
+                  <span className="options-icon">🖼️</span>
+                  <span>Change Wallpaper</span>
+                  <span className="options-chevron">{optionsSubMenu === 'wallpaper' ? '▾' : '▸'}</span>
+                </button>
+                {optionsSubMenu === 'wallpaper' && (
+                  <div className="options-submenu">
+                    <div className="wallpaper-grid">
+                      {WALLPAPERS.map((wp) => (
+                        <button
+                          key={wp.id}
+                          className={`wallpaper-tile ${wallpaper === wp.id ? 'active' : ''}`}
+                          onClick={() => selectWallpaper(wp.id)}
+                          style={wp.style}
+                          title={wp.label}
+                        >
+                          {wp.id === 'none' && '✕'}
+                        </button>
+                      ))}
+                      <label className={`wallpaper-tile custom-upload ${wallpaper === 'custom' ? 'active' : ''}`} title="Upload image">
+                        📷
+                        <input type="file" accept="image/*" hidden onChange={handleCustomWallpaper} />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── Search by Date ─── */}
+                <button
+                  className="options-item"
+                  onClick={() => {
+                    setShowOptionsMenu(false);
+                    setOptionsSubMenu(null);
+                    setShowSearch(true);
+                    setSearchQuery('');
+                    setSearchDate('');
+                    setSearchIndex(0);
+                  }}
+                >
+                  <span className="options-icon">📅</span>
+                  <span>Search by Date</span>
+                </button>
+
+                {/* ─── Clear Chat ─── */}
+                <button
+                  className="options-item options-item-danger"
+                  onClick={() => {
+                    setShowOptionsMenu(false);
+                    setOptionsSubMenu(null);
+                    setShowClearConfirm(true);
+                  }}
+                >
+                  <span className="options-icon">🗑️</span>
+                  <span>Clear Chat</span>
+                </button>
               </div>
             )}
           </div>
-          <img src={assets.help_icon} className='Help' alt="" />
         </div>
       </div>
 
@@ -706,6 +854,21 @@ const ChatBox = () => {
       </div>
 
       {/* ─── Blocked Banner ─── */}
+      {/* ─── Clear Chat Confirmation ─── */}
+      {showClearConfirm && (
+        <div className="clear-confirm-overlay">
+          <div className="clear-confirm-dialog">
+            <span className="clear-confirm-icon">🗑️</span>
+            <h4>Clear Chat</h4>
+            <p>Are you sure you want to delete all messages? This cannot be undone.</p>
+            <div className="clear-confirm-actions">
+              <button className="clear-cancel-btn" onClick={() => setShowClearConfirm(false)}>Cancel</button>
+              <button className="clear-confirm-btn" onClick={clearChat}>Clear All</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {chatDisabled && chatType === "user" && (
         <div className="blocked-banner">
           {blockedThem
