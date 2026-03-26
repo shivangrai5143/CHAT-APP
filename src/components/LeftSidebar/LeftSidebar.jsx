@@ -45,9 +45,10 @@ const LeftSidebar = () => {
   const [roomSearchResults, setRoomSearchResults] = useState(null);
 
   // Theme toggle
-  const [isDark, setIsDark] = useState(() => {
+  const themes = ['dark', 'light', 'gradient', 'modern'];
+  const [currentTheme, setCurrentTheme] = useState(() => {
     const saved = localStorage.getItem('theme');
-    return saved ? saved === 'dark' : true;
+    return themes.includes(saved) ? saved : 'dark';
   });
 
   const [accent, setAccent] = useState(() => {
@@ -63,10 +64,21 @@ const LeftSidebar = () => {
   ];
 
   const toggleTheme = () => {
-    const newTheme = isDark ? 'light' : 'dark';
-    setIsDark(!isDark);
+    const currentIndex = themes.indexOf(currentTheme);
+    const newTheme = themes[(currentIndex + 1) % themes.length];
+    setCurrentTheme(newTheme);
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
+  };
+
+  const getThemeIcon = () => {
+    switch (currentTheme) {
+      case 'light': return '☀️';
+      case 'dark': return '🌙';
+      case 'gradient': return '🌅';
+      case 'modern': return '🏙️';
+      default: return '🌙';
+    }
   };
 
   const setAccentColor = (id) => {
@@ -305,7 +317,7 @@ const LeftSidebar = () => {
           <img src={assets.logo} className='logo' alt="Logo" />
           <div className="nav-right">
             <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
-              {isDark ? '☀️' : '🌙'}
+              {getThemeIcon()}
             </button>
             <div className="menu">
               <img

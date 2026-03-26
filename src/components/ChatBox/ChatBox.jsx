@@ -72,9 +72,10 @@ const ChatBox = () => {
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [optionsSubMenu, setOptionsSubMenu] = useState(null); // 'theme' | 'wallpaper' | null
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [isDark, setIsDark] = useState(() => {
+  const themes = ['dark', 'light', 'gradient', 'modern'];
+  const [currentTheme, setCurrentTheme] = useState(() => {
     const saved = localStorage.getItem('theme');
-    return saved ? saved === 'dark' : true;
+    return themes.includes(saved) ? saved : 'dark';
   });
   const [accent, setAccent] = useState(() => {
     return localStorage.getItem('accent') || '';
@@ -445,10 +446,21 @@ const ChatBox = () => {
 
   // ─── Theme helpers ───
   const toggleTheme = () => {
-    const newTheme = isDark ? 'light' : 'dark';
-    setIsDark(!isDark);
+    const currentIndex = themes.indexOf(currentTheme);
+    const newTheme = themes[(currentIndex + 1) % themes.length];
+    setCurrentTheme(newTheme);
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
+  };
+
+  const getThemeIcon = () => {
+    switch (currentTheme) {
+      case 'light': return '☀️ Light';
+      case 'dark': return '🌙 Dark';
+      case 'gradient': return '🌅 Gradient';
+      case 'modern': return '🏙️ Modern';
+      default: return '🌙 Dark';
+    }
   };
 
   const setAccentColor = (id) => {
@@ -484,6 +496,44 @@ const ChatBox = () => {
       console.error('Error clearing chat:', error);
       toast.error('Failed to clear chat');
     }
+  };
+
+  // ─── Export & Backup ───
+  const exportChatTxt = () => {
+    if (!messages.length) return toast.info("No messages to export.");
+    let txt = `Chat Export - ${headerName}\nDate: ${new Date().toLocaleString()}\n\n`;
+    messages.forEach(msg => {
+      const sender = msg.sId === userData.uid ? "You" : (msg.sName || chatUser?.name || "User");
+      const time = formatTime(msg.createdAt);
+      const text = msg.text || (msg.image ? "[Image]" : msg.fileName ? `[File: ${msg.fileName}]` : "");
+      txt += `[${time}] ${sender}: ${text}\n`;
+    });
+    const blob = new Blob([txt], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Chat_Export_${headerName.replace(/\s+/g, '_')}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowOptionsMenu(false);
+  };
+
+  const backupChatJson = () => {
+    if (!messages.length) return toast.info("No messages to backup.");
+    const data = {
+      chatName: headerName,
+      chatType,
+      exportedAt: new Date().toISOString(),
+      messages: messages.map(msg => ({...msg, createdAt: msg.createdAt ? getMessageDate(msg).toISOString() : null}))
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Chat_Backup_${headerName.replace(/\s+/g, '_')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowOptionsMenu(false);
   };
 
   // ─── Search logic (text + date) ───
@@ -590,14 +640,16 @@ const ChatBox = () => {
         {chatType === "room" ? (
           <div className="room-header-icon">👥</div>
         ) : (
-          <img src={headerAvatar} alt="" />
+          <div className="avatar-wrapper">
+            <img src={headerAvatar} alt="" />
+            {chatType === "user" && isOnline(chatUser?.lastSeen) && (
+              <span className="online-dot"></span>
+            )}
+          </div>
         )}
         <div className="chat-user-info">
           <p>
             {headerName}
-            {chatType === "user" && isOnline(chatUser?.lastSeen) && (
-              <img className='dot' src={assets.green_dot} alt="" />
-            )}
             {chatType === "room" && (
               <span className="room-member-count">
                 {roomData?.members?.length || 0} members
@@ -632,11 +684,9 @@ const ChatBox = () => {
                 {optionsSubMenu === 'theme' && (
                   <div className="options-submenu theme-panel">
                     <div className="theme-toggle-row">
-                      <span>{isDark ? '🌙 Dark' : '☀️ Light'}</span>
-                      <button className="theme-switch" onClick={toggleTheme}>
-                        <span className={`theme-switch-track ${isDark ? 'dark' : 'light'}`}>
-                          <span className="theme-switch-thumb" />
-                        </span>
+                      <span>{getThemeIcon()}</span>
+                      <button className="theme-switch" onClick={toggleTheme} style={{background: 'var(--accent)', color: '#fff', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold'}}>
+                        Switch
                       </button>
                     </div>
                     <div className="accent-row">
@@ -698,6 +748,16 @@ const ChatBox = () => {
                 >
                   <span className="options-icon">📅</span>
                   <span>Search by Date</span>
+                </button>
+
+                {/* ─── Export & Backup ─── */}
+                <button className="options-item" onClick={exportChatTxt}>
+                  <span className="options-icon">📄</span>
+                  <span>Export Chat (TXT)</span>
+                </button>
+                <button className="options-item" onClick={backupChatJson}>
+                  <span className="options-icon">💾</span>
+                  <span>Backup Chat (JSON)</span>
                 </button>
 
                 {/* ─── Clear Chat ─── */}
