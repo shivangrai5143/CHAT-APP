@@ -321,10 +321,7 @@ const RightSidebar = () => {
         <div className="rs-profile">
           <img src={chatUser.avatar || assets.profile_img} alt="" />
           <h3>
-            {chatUser.name || chatUser.username || 'User'}{' '}
-            {isOnline(chatUser.lastSeen) && (
-              <img src={assets.green_dot} className='dot' alt="" />
-            )}
+            {chatUser.name || chatUser.username || 'User'}
           </h3>
           <p>{chatUser.bio || 'Hey, There I am using chat-app'}</p>
           <p className="rs-status">
