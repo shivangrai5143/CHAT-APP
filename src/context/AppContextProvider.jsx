@@ -131,11 +131,17 @@ const AppContextProvider = ({ children }) => {
     if (!chatUser?.uid || chatType !== "user") return;
 
     const userRef = doc(db, "users", chatUser.uid);
-    const unsub = onSnapshot(userRef, (snap) => {
-      if (snap.exists()) {
-        setChatUser((prev) => prev ? { ...prev, ...snap.data() } : prev);
+    const unsub = onSnapshot(
+      userRef,
+      (snap) => {
+        if (snap.exists()) {
+          setChatUser((prev) => prev ? { ...prev, ...snap.data() } : prev);
+        }
+      },
+      (error) => {
+        console.error("Firestore Error in chatUser listener:", error);
       }
-    });
+    );
 
     return () => unsub();
   }, [chatUser?.uid, chatType]);
@@ -145,22 +151,28 @@ const AppContextProvider = ({ children }) => {
     if (!messagesId) return;
 
     const typingRef = doc(db, "typing", messagesId);
-    const unsub = onSnapshot(typingRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() || {};
-        // Filter out stale typing indicators (> 4 seconds old)
-        const now = Date.now();
-        const active = {};
-        Object.entries(data).forEach(([uid, timestamp]) => {
-          if (now - timestamp < 4000) {
-            active[uid] = timestamp;
-          }
-        });
-        setTypingUsers((prev) => ({ ...prev, [messagesId]: active }));
-      } else {
-        setTypingUsers((prev) => ({ ...prev, [messagesId]: {} }));
+    const unsub = onSnapshot(
+      typingRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() || {};
+          // Filter out stale typing indicators (> 4 seconds old)
+          const now = Date.now();
+          const active = {};
+          Object.entries(data).forEach(([uid, timestamp]) => {
+            if (now - timestamp < 4000) {
+              active[uid] = timestamp;
+            }
+          });
+          setTypingUsers((prev) => ({ ...prev, [messagesId]: active }));
+        } else {
+          setTypingUsers((prev) => ({ ...prev, [messagesId]: {} }));
+        }
+      },
+      (error) => {
+        console.error("Firestore Error in typing listener:", error);
       }
-    });
+    );
 
     return () => unsub();
   }, [messagesId]);
@@ -171,20 +183,26 @@ const AppContextProvider = ({ children }) => {
 
     const chatRef = doc(db, "chats", userData.uid);
 
-    const unSubscribe = onSnapshot(chatRef, async (res) => {
-      const chatItems = res.data()?.chatData || [];
+    const unSubscribe = onSnapshot(
+      chatRef,
+      async (res) => {
+        const chatItems = res.data()?.chatData || [];
 
-      const tempData = await Promise.all(
-        chatItems.map(async (item) => {
-          const userRef = doc(db, "users", item.rId);
-          const userSnap = await getDoc(userRef);
-          const user = userSnap.data();
-          return { ...item, userData: user };
-        })
-      );
+        const tempData = await Promise.all(
+          chatItems.map(async (item) => {
+            const userRef = doc(db, "users", item.rId);
+            const userSnap = await getDoc(userRef);
+            const user = userSnap.data();
+            return { ...item, userData: user };
+          })
+        );
 
-      setChatData(tempData.sort((a, b) => b.updatedAt - a.updatedAt));
-    });
+        setChatData(tempData.sort((a, b) => b.updatedAt - a.updatedAt));
+      },
+      (error) => {
+        console.error("Firestore Error in chats listener:", error);
+      }
+    );
 
     return () => unSubscribe();
   }, [userData]);
@@ -196,13 +214,19 @@ const AppContextProvider = ({ children }) => {
     const roomsRef = collection(db, "rooms");
     const q = query(roomsRef, where("members", "array-contains", userData.uid));
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      const roomsList = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setRooms(roomsList.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const roomsList = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        setRooms(roomsList.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
+      },
+      (error) => {
+        console.error("Firestore Error in rooms listener:", error);
+      }
+    );
 
     return () => unsub();
   }, [userData?.uid]);
@@ -218,27 +242,33 @@ const AppContextProvider = ({ children }) => {
     const msgRef = collection(db, parentCollection, messagesId, "messages");
     const q = query(msgRef, orderBy("createdAt", "asc"));
 
-    const unSubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setMessages(msgs);
+    const unSubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const msgs = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        setMessages(msgs);
 
-      // Browser notification for new messages when tab not focused
-      if (!tabFocusedRef.current && "Notification" in window && Notification.permission === "granted") {
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.sId !== userData?.uid) {
-          const senderName = lastMsg.sName || chatUser?.name || chatUser?.username || "Someone";
-          const body = lastMsg.text || (lastMsg.image ? "📷 Image" : (lastMsg.fileName ? `📎 ${lastMsg.fileName}` : "New message"));
-          new Notification(`${senderName}`, {
-            body,
-            icon: lastMsg.sAvatar || chatUser?.avatar || "/favicon.ico",
-            tag: messagesId, // prevent duplicate notifications
-          });
+        // Browser notification for new messages when tab not focused
+        if (!tabFocusedRef.current && "Notification" in window && Notification.permission === "granted") {
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.sId !== userData?.uid) {
+            const senderName = lastMsg.sName || chatUser?.name || chatUser?.username || "Someone";
+            const body = lastMsg.text || (lastMsg.image ? "📷 Image" : (lastMsg.fileName ? `📎 ${lastMsg.fileName}` : "New message"));
+            new Notification(`${senderName}`, {
+              body,
+              icon: lastMsg.sAvatar || chatUser?.avatar || "/favicon.ico",
+              tag: messagesId, // prevent duplicate notifications
+            });
+          }
         }
+      },
+      (error) => {
+        console.error("Firestore Error in messages listener:", error);
       }
-    });
+    );
 
     return () => unSubscribe();
   }, [messagesId, chatType]);
@@ -363,38 +393,45 @@ const AppContextProvider = ({ children }) => {
   useEffect(() => {
     if (!userData?.uid) return;
 
-    const now = Date.now();
-    const yesterday = now - 24 * 60 * 60 * 1000;
+    // Use a basic query to avoid potential hidden indexing/permission issues
+    const q = query(collection(db, "statusUpdates"));
 
-    const q = query(
-      collection(db, "status"),
-      where("expiresAt", ">", now),
-      orderBy("expiresAt", "desc")
+    const unsub = onSnapshot(
+      q,
+      async (snap) => {
+        const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        
+        // Filter and sort on the client side
+        const now = Date.now();
+        const activeStatuses = raw
+          .filter((s) => s.expiresAt > now)
+          .sort((a, b) => b.expiresAt - a.expiresAt);
+
+        // Attach user display info
+        const withUsers = await Promise.all(
+          activeStatuses.map(async (s) => {
+            if (s.userId === userData.uid) {
+              return {
+                ...s,
+                userName: userData.name || userData.username || "Me",
+                userAvatar: userData.avatar || "",
+              };
+            }
+            try {
+              const uSnap = await getDoc(doc(db, "users", s.userId));
+              const u = uSnap.data() || {};
+              return { ...s, userName: u.name || u.username || "User", userAvatar: u.avatar || "" };
+            } catch {
+              return { ...s, userName: "User", userAvatar: "" };
+            }
+          })
+        );
+        setStatuses(withUsers);
+      },
+      (error) => {
+        console.error("Firestore Error in status listener:", error);
+      }
     );
-
-    const unsub = onSnapshot(q, async (snap) => {
-      const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      // Attach user display info
-      const withUsers = await Promise.all(
-        raw.map(async (s) => {
-          if (s.userId === userData.uid) {
-            return {
-              ...s,
-              userName: userData.name || userData.username || "Me",
-              userAvatar: userData.avatar || "",
-            };
-          }
-          try {
-            const uSnap = await getDoc(doc(db, "users", s.userId));
-            const u = uSnap.data() || {};
-            return { ...s, userName: u.name || u.username || "User", userAvatar: u.avatar || "" };
-          } catch {
-            return { ...s, userName: "User", userAvatar: "" };
-          }
-        })
-      );
-      setStatuses(withUsers);
-    });
 
     return () => unsub();
   }, [userData?.uid]);
@@ -403,7 +440,7 @@ const AppContextProvider = ({ children }) => {
   const postStatus = async ({ type, mediaUrl, text, textBg }) => {
     if (!userData?.uid) return;
     const now = Date.now();
-    await addDoc(collection(db, "status"), {
+    await addDoc(collection(db, "statusUpdates"), {
       userId: userData.uid,
       type,
       ...(mediaUrl ? { mediaUrl } : {}),
@@ -418,7 +455,7 @@ const AppContextProvider = ({ children }) => {
   const markStatusViewed = async (statusId) => {
     if (!statusId || !userData?.uid) return;
     try {
-      const ref = doc(db, "status", statusId);
+      const ref = doc(db, "statusUpdates", statusId);
       await updateDoc(ref, { viewers: arrayUnion(userData.uid) });
     } catch (e) {
       // silently fail — non-critical

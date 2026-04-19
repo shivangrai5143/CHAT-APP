@@ -115,7 +115,7 @@ const ProfileUpdate = () => {
           <input
             type="text"
             placeholder="Your name"
-            value={name}
+            value={name || ""}
             onChange={(e) => setName(e.target.value)}
             required
           />
@@ -124,7 +124,7 @@ const ProfileUpdate = () => {
           <input
             type="text"
             placeholder="Username"
-            value={username}
+            value={username || ""}
             onChange={(e) => setUsername(e.target.value)}
             required
           />
@@ -132,7 +132,7 @@ const ProfileUpdate = () => {
 
           <textarea
             placeholder="Write profile bio!"
-            value={bio}
+            value={bio || ""}
             onChange={(e) => setBio(e.target.value)}
             required
           />
