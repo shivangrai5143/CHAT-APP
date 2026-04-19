@@ -17,6 +17,8 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
+import { generateKeyPair, exportPublicKey } from "../services/cryptoService";
+import { getPrivateKey, savePrivateKey } from "../services/keyManager";
 
 export const AppContext = createContext();
 
@@ -33,6 +35,8 @@ const AppContextProvider = ({ children }) => {
   const [roomData, setRoomData] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [typingUsers, setTypingUsers] = useState({}); // { chatId: { uid: timestamp } }
+  const [statuses, setStatuses] = useState([]); // active status updates
+  const [userPrivateKey, setUserPrivateKey] = useState(null); // RSA CryptoKey
   const userDataRef = useRef(null);
   const tabFocusedRef = useRef(true);
 
@@ -331,6 +335,96 @@ const AppContextProvider = ({ children }) => {
     }
   };
 
+  // ─── E2EE Key Initialisation ───
+  const initEncryption = useCallback(async (uid) => {
+    if (!uid) return;
+    try {
+      // Try to load existing private key from IndexedDB
+      let privKey = await getPrivateKey(uid);
+      if (privKey) {
+        setUserPrivateKey(privKey);
+        return;
+      }
+      // No key on this device — generate a fresh key pair
+      const keyPair = await generateKeyPair();
+      const jwkPublic = await exportPublicKey(keyPair.publicKey);
+      // Store public key in Firestore
+      const userRef = doc(db, "users", uid);
+      await updateDoc(userRef, { publicKey: jwkPublic });
+      // Store private key in IndexedDB
+      await savePrivateKey(uid, keyPair.privateKey);
+      setUserPrivateKey(keyPair.privateKey);
+    } catch (e) {
+      console.error("E2EE init error:", e);
+    }
+  }, []);
+
+  // ─── Status Listener (live, filtered to last 24h) ───
+  useEffect(() => {
+    if (!userData?.uid) return;
+
+    const now = Date.now();
+    const yesterday = now - 24 * 60 * 60 * 1000;
+
+    const q = query(
+      collection(db, "status"),
+      where("expiresAt", ">", now),
+      orderBy("expiresAt", "desc")
+    );
+
+    const unsub = onSnapshot(q, async (snap) => {
+      const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // Attach user display info
+      const withUsers = await Promise.all(
+        raw.map(async (s) => {
+          if (s.userId === userData.uid) {
+            return {
+              ...s,
+              userName: userData.name || userData.username || "Me",
+              userAvatar: userData.avatar || "",
+            };
+          }
+          try {
+            const uSnap = await getDoc(doc(db, "users", s.userId));
+            const u = uSnap.data() || {};
+            return { ...s, userName: u.name || u.username || "User", userAvatar: u.avatar || "" };
+          } catch {
+            return { ...s, userName: "User", userAvatar: "" };
+          }
+        })
+      );
+      setStatuses(withUsers);
+    });
+
+    return () => unsub();
+  }, [userData?.uid]);
+
+  // ─── Post a new status ───
+  const postStatus = async ({ type, mediaUrl, text, textBg }) => {
+    if (!userData?.uid) return;
+    const now = Date.now();
+    await addDoc(collection(db, "status"), {
+      userId: userData.uid,
+      type,
+      ...(mediaUrl ? { mediaUrl } : {}),
+      ...(text ? { text, textBg: textBg ?? 0 } : {}),
+      createdAt: now,
+      expiresAt: now + 24 * 60 * 60 * 1000,
+      viewers: [],
+    });
+  };
+
+  // ─── Mark a status as viewed ───
+  const markStatusViewed = async (statusId) => {
+    if (!statusId || !userData?.uid) return;
+    try {
+      const ref = doc(db, "status", statusId);
+      await updateDoc(ref, { viewers: arrayUnion(userData.uid) });
+    } catch (e) {
+      // silently fail — non-critical
+    }
+  };
+
   const value = {
     userData,
     setUserData,
@@ -357,6 +451,12 @@ const AppContextProvider = ({ children }) => {
     isBlocked,
     isBlockedBy,
     reportUser,
+    statuses,
+    postStatus,
+    markStatusViewed,
+    userPrivateKey,
+    setUserPrivateKey,
+    initEncryption,
   };
 
   return (

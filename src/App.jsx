@@ -12,13 +12,14 @@ import { AppContext } from "./context/AppContextProvider";
 const App = () => {
 
   const navigate = useNavigate();
-  const { loadUserData } = useContext(AppContext);
+  const { loadUserData, initEncryption } = useContext(AppContext);
 
   useEffect(() => {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         await loadUserData(user.uid, true);
+        initEncryption(user.uid);
       } else {
         navigate("/");
       }

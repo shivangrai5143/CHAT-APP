@@ -18,6 +18,7 @@ import {
 import { db } from '../../config/firebase';
 import { toast } from 'react-toastify';
 import EmojiPicker from 'emoji-picker-react';
+import { encryptMessage, decryptMessage, importPublicKey } from '../../services/cryptoService';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
@@ -51,9 +52,11 @@ const ChatBox = () => {
     getTypingUsers,
     isBlocked,
     isBlockedBy,
+    userPrivateKey,
   } = useContext(AppContext);
 
   const [input, setInput] = useState('');
+  const [decryptedTexts, setDecryptedTexts] = useState({}); // { msgId: decryptedString }
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,6 +90,7 @@ const ChatBox = () => {
   const wallpaperRef = useRef(null);
   const optionsRef = useRef(null);
   const msgRefs = useRef({});
+  const decryptionCacheRef = useRef({}); // persists decoded texts across re-renders
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -94,6 +98,34 @@ const ChatBox = () => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, showSearch]);
+
+  // ─── Decrypt incoming encrypted messages ───
+  useEffect(() => {
+    if (!userPrivateKey || chatType !== 'user') return;
+    const encrypted = messages.filter(
+      (m) => m.encryptedMessage && !decryptionCacheRef.current[m.id]
+    );
+    if (!encrypted.length) return;
+
+    (async () => {
+      const updates = {};
+      await Promise.all(
+        encrypted.map(async (msg) => {
+          try {
+            const plain = await decryptMessage(
+              { encryptedMessage: msg.encryptedMessage, encryptedAESKey: msg.encryptedAESKey, iv: msg.iv },
+              userPrivateKey
+            );
+            updates[msg.id] = plain;
+          } catch {
+            updates[msg.id] = '🔒 [Encrypted message]';
+          }
+        })
+      );
+      decryptionCacheRef.current = { ...decryptionCacheRef.current, ...updates };
+      setDecryptedTexts((prev) => ({ ...prev, ...updates }));
+    })();
+  }, [messages, userPrivateKey, chatType]);
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -199,12 +231,37 @@ const ChatBox = () => {
 
       const parentCollection = chatType === "room" ? "rooms" : "messages";
 
-      const msgData = {
+      let msgData = {
         sId: userData.uid,
-        text: messageText,
         createdAt: serverTimestamp(),
         status: 'sent',
       };
+
+      if (chatType === "user" && chatUser && userPrivateKey) {
+        // ─ E2EE: encrypt message for the recipient ─
+        try {
+          const recipientSnap = await getDoc(doc(db, "users", chatUser.uid));
+          const recipientJwk = recipientSnap.data()?.publicKey;
+          if (recipientJwk) {
+            const recipientPubKey = await importPublicKey(recipientJwk);
+            const encrypted = await encryptMessage(messageText, recipientPubKey);
+            msgData.encryptedMessage = encrypted.encryptedMessage;
+            msgData.encryptedAESKey = encrypted.encryptedAESKey;
+            msgData.iv = encrypted.iv;
+            msgData.e2ee = true;
+            // Optimistically pre-cache our own plaintext so we see it instantly
+            decryptionCacheRef.current[`pending`] = messageText;
+          } else {
+            // Recipient has no public key yet — fall back to plaintext
+            msgData.text = messageText;
+          }
+        } catch (cryptoErr) {
+          console.error('Encryption error — falling back to plaintext:', cryptoErr);
+          msgData.text = messageText;
+        }
+      } else {
+        msgData.text = messageText;
+      }
 
       if (chatType === "room") {
         msgData.sName = userData.name || userData.username || 'User';
@@ -212,10 +269,16 @@ const ChatBox = () => {
         delete msgData.status;
       }
 
-      await addDoc(collection(db, parentCollection, messagesId, "messages"), msgData);
+      const docRef = await addDoc(collection(db, parentCollection, messagesId, "messages"), msgData);
+
+      // After we know the doc id, cache the plaintext for our own view
+      if (msgData.e2ee) {
+        decryptionCacheRef.current[docRef.id] = messageText;
+        setDecryptedTexts((prev) => ({ ...prev, [docRef.id]: messageText }));
+      }
 
       if (chatType === "user" && chatUser) {
-        await updateChatData(messageText);
+        await updateChatData(msgData.text || '🔒 Encrypted message');
       }
 
       if (chatType === "room") {
@@ -852,7 +915,20 @@ const ChatBox = () => {
                     </div>
                   ) : (
                     <p className="msg">
-                      {showSearch && searchQuery ? highlightText(msg.text, searchQuery) : msg.text}
+                      {(() => {
+                        // E2EE message: show decrypted text or fallback
+                        if (msg.e2ee || msg.encryptedMessage) {
+                          const decoded = decryptedTexts[msg.id];
+                          if (decoded) {
+                            return showSearch && searchQuery
+                              ? highlightText(decoded, searchQuery)
+                              : <>{decoded} <span className="e2ee-badge" title="End-to-end encrypted">🔒</span></>;
+                          }
+                          return <span className="e2ee-pending">🔒 Decrypting…</span>;
+                        }
+                        // Plain text
+                        return showSearch && searchQuery ? highlightText(msg.text, searchQuery) : msg.text;
+                      })()}
                     </p>
                   )}
 

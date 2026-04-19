@@ -984,3 +984,24 @@
   font-weight: 500;
   flex-shrink: 0;
 }
+
+/* ─── E2EE Lock Badge ─── */
+.e2ee-badge {
+  font-size: 10px;
+  opacity: 0.55;
+  margin-left: 4px;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.e2ee-pending {
+  font-size: 13px;
+  opacity: 0.5;
+  font-style: italic;
+  animation: e2eeFade 1.2s ease infinite alternate;
+}
+
+@keyframes e2eeFade {
+  from { opacity: 0.3; }
+  to { opacity: 0.6; }
+}

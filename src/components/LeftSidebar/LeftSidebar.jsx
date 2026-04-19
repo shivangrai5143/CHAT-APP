@@ -5,6 +5,7 @@ import { AppContext } from '../../context/AppContextProvider';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../../config/firebase';
 import { toast } from 'react-toastify';
+import StatusTab from '../Status/StatusTab';
 
 import {
   collection,
@@ -38,7 +39,7 @@ const LeftSidebar = () => {
 
   const navigate = useNavigate();
   const [searchResults, setSearchResults] = useState(null);
-  const [activeTab, setActiveTab] = useState('chats'); // 'chats' or 'rooms'
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ls-tab') || 'chats'); // 'chats' | 'rooms' | 'status'
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [roomSearch, setRoomSearch] = useState('');
@@ -351,25 +352,31 @@ const LeftSidebar = () => {
         <div className="ls-tabs">
           <button
             className={`ls-tab ${activeTab === 'chats' ? 'active' : ''}`}
-            onClick={() => setActiveTab('chats')}
+            onClick={() => { setActiveTab('chats'); localStorage.setItem('ls-tab', 'chats'); }}
           >
             💬 Chats
           </button>
           <button
             className={`ls-tab ${activeTab === 'rooms' ? 'active' : ''}`}
-            onClick={() => setActiveTab('rooms')}
+            onClick={() => { setActiveTab('rooms'); localStorage.setItem('ls-tab', 'rooms'); }}
           >
             👥 Rooms
           </button>
+          <button
+            className={`ls-tab ${activeTab === 'status' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('status'); localStorage.setItem('ls-tab', 'status'); }}
+          >
+            📸 Status
+          </button>
         </div>
 
-        {/* Search */}
+        {/* Search — only shown for chats & rooms tabs */}
         {activeTab === 'chats' ? (
           <div className="ls-search">
             <img src={assets.search_icon} alt="Search Icon" />
             <input onChange={inputHandler} type="text" placeholder='Search users...' />
           </div>
-        ) : (
+        ) : activeTab === 'rooms' ? (
           <div className="ls-search">
             <img src={assets.search_icon} alt="Search Icon" />
             <input
@@ -379,13 +386,15 @@ const LeftSidebar = () => {
               placeholder='Find rooms to join...'
             />
           </div>
-        )}
+        ) : null}
 
       </div>
 
       <div className="ls-list">
 
-        {activeTab === 'chats' ? (
+        {activeTab === 'status' ? (
+          <StatusTab />
+        ) : activeTab === 'chats' ? (
           // ─── CHATS TAB ───
           <>
             {searchResults !== null ? (
