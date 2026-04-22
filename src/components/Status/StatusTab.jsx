@@ -1,20 +1,17 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
-import './Status.css';
 import assets from '../../assets/assets';
 import { AppContext } from '../../context/AppContextProvider';
 import { toast } from 'react-toastify';
-
-// ─── Status Tab Component ────────────────────────────────────────────────────
 
 const StatusTab = () => {
   const { userData, statuses, postStatus, markStatusViewed } = useContext(AppContext);
 
   const [showPostModal, setShowPostModal] = useState(false);
-  const [viewerData, setViewerData] = useState(null); // { statuses: [], userIndex: 0, statusIndex: 0 }
+  const [viewerData, setViewerData] = useState(null); 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [textInput, setTextInput] = useState('');
-  const [postType, setPostType] = useState('media'); // 'media' | 'text'
+  const [postType, setPostType] = useState('media'); 
   const [textBg, setTextBg] = useState(0);
   const fileInputRef = useRef(null);
 
@@ -27,8 +24,6 @@ const StatusTab = () => {
     'linear-gradient(135deg, #1e293b, #334155)',
   ];
 
-  // ─── Group statuses by user ──────────────────────────────────────────────
-  // My statuses first, then others sorted by most recent
   const myStatuses = statuses.filter((s) => s.userId === userData?.uid);
   const othersMap = {};
   statuses
@@ -42,7 +37,6 @@ const StatusTab = () => {
     (a, b) => b[0].createdAt - a[0].createdAt
   );
 
-  // ─── Post a new status ───────────────────────────────────────────────────
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -96,7 +90,6 @@ const StatusTab = () => {
     setShowPostModal(false);
   };
 
-  // ─── Open viewer ─────────────────────────────────────────────────────────
   const openViewer = (groups, groupIndex, statusIndex = 0) => {
     setViewerData({ groups, groupIndex, statusIndex });
   };
@@ -106,26 +99,26 @@ const StatusTab = () => {
     openViewer([myStatuses], 0, 0);
   };
 
-  // ─── All unviewed check for a group ──────────────────────────────────────
-  const hasUnviewed = (group) =>
-    group.some((s) => !s.viewers?.includes(userData?.uid));
+  const hasUnviewed = (group) => group.some((s) => !s.viewers?.includes(userData?.uid));
 
   return (
-    <div className="status-tab">
+    <div className="flex flex-col space-y-4 p-2">
 
-      {/* ─── My Status Card ─── */}
-      <div className="my-status-card" onClick={openMyViewer}>
-        <div className={`status-avatar-ring ${myStatuses.length > 0 ? 'has-status' : 'no-status'}`}>
-          <img src={userData?.avatar || assets.profile_img} alt="me" />
+      <div 
+        className="flex items-center gap-4 p-3 bg-slate-800 rounded-2xl cursor-pointer hover:bg-slate-700 transition-colors border border-slate-700/50 shadow-sm" 
+        onClick={openMyViewer}
+      >
+        <div className={`relative rounded-full p-0.5 ${myStatuses.length > 0 ? 'bg-gradient-to-tr from-indigo-500 to-purple-500' : 'bg-slate-600'}`}>
+          <img src={userData?.avatar || assets.profile_img} alt="me" className="w-14 h-14 rounded-full border-2 border-slate-800 object-cover" />
           <button
-            className="add-status-plus"
+            className="absolute bottom-0 right-0 w-5 h-5 bg-indigo-500 border-2 border-slate-800 rounded-full flex items-center justify-center text-white text-xs font-bold hover:bg-indigo-400 transition-colors"
             onClick={(e) => { e.stopPropagation(); setShowPostModal(true); }}
             title="Add status"
-          >＋</button>
+          >+</button>
         </div>
-        <div className="status-info">
-          <p className="status-name">My Status</p>
-          <span className="status-sub">
+        <div>
+          <p className="font-semibold text-white">My Status</p>
+          <span className="text-sm text-slate-400">
             {myStatuses.length > 0
               ? `${myStatuses.length} update${myStatuses.length > 1 ? 's' : ''}`
               : 'Tap to add a status update'}
@@ -133,95 +126,89 @@ const StatusTab = () => {
         </div>
       </div>
 
-      {/* ─── Others' Statuses ─── */}
       {othersGroups.length > 0 && (
-        <>
-          <div className="status-section-label">Recent updates</div>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider px-2 mt-2">Recent updates</p>
           {othersGroups.map((group, gi) => {
             const first = group[0];
             const unviewed = hasUnviewed(group);
             return (
               <div
                 key={first.userId}
-                className="status-card"
+                className="flex items-center gap-4 p-3 hover:bg-slate-800 rounded-2xl cursor-pointer transition-colors"
                 onClick={() => {
                   openViewer(othersGroups, gi, 0);
                   markStatusViewed(first.id);
                 }}
               >
-                <div className={`status-avatar-ring ${unviewed ? 'unviewed' : 'viewed'}`}>
-                  <img src={first.userAvatar || assets.profile_img} alt={first.userName} />
+                <div className={`rounded-full p-0.5 ${unviewed ? 'bg-gradient-to-tr from-indigo-500 to-purple-500' : 'bg-slate-600'}`}>
+                  <img src={first.userAvatar || assets.profile_img} alt={first.userName} className="w-14 h-14 rounded-full border-2 border-slate-900 object-cover" />
                 </div>
-                <div className="status-info">
-                  <p className="status-name">{first.userName || 'User'}</p>
-                  <span className="status-sub">
-                    {formatRelativeTime(first.createdAt)}
-                  </span>
+                <div>
+                  <p className="font-semibold text-white">{first.userName || 'User'}</p>
+                  <span className="text-sm text-slate-400">{formatRelativeTime(first.createdAt)}</span>
                 </div>
               </div>
             );
           })}
-        </>
-      )}
-
-      {othersGroups.length === 0 && myStatuses.length === 0 && (
-        <div className="status-empty">
-          <span>📸</span>
-          <p>No status updates yet</p>
-          <small>Be the first to share a moment!</small>
         </div>
       )}
 
-      {/* ─── Post Modal ─── */}
+      {othersGroups.length === 0 && myStatuses.length === 0 && (
+        <div className="flex flex-col items-center justify-center text-center mt-10 p-6 bg-slate-800/50 rounded-2xl border border-slate-700/50 border-dashed">
+          <span className="text-4xl mb-3 opacity-50">📸</span>
+          <p className="font-semibold text-slate-300">No status updates yet</p>
+          <small className="text-slate-500 mt-1">Be the first to share a moment!</small>
+        </div>
+      )}
+
+      {/* Post Modal */}
       {showPostModal && (
-        <div className="status-modal-overlay" onClick={() => !uploading && setShowPostModal(false)}>
-          <div className="status-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="status-modal-header">
-              <h3>Add Status</h3>
-              <button onClick={() => setShowPostModal(false)}>✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => !uploading && setShowPostModal(false)}>
+          <div className="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+              <h3 className="font-semibold text-white">Add Status</h3>
+              <button className="text-slate-400 hover:text-white" onClick={() => setShowPostModal(false)}>✕</button>
             </div>
 
-            <div className="status-post-tabs">
+            <div className="flex border-b border-slate-700">
               <button
-                className={postType === 'media' ? 'active' : ''}
+                className={`flex-1 py-3 text-sm font-medium transition-colors ${postType === 'media' ? 'bg-indigo-600/20 text-indigo-400 border-b-2 border-indigo-500' : 'text-slate-400 hover:bg-slate-700'}`}
                 onClick={() => setPostType('media')}
               >📷 Media</button>
               <button
-                className={postType === 'text' ? 'active' : ''}
+                className={`flex-1 py-3 text-sm font-medium transition-colors ${postType === 'text' ? 'bg-indigo-600/20 text-indigo-400 border-b-2 border-indigo-500' : 'text-slate-400 hover:bg-slate-700'}`}
                 onClick={() => setPostType('text')}
               >✏️ Text</button>
             </div>
 
             {postType === 'media' ? (
-              <div className="status-upload-area">
+              <div className="p-6 flex flex-col items-center justify-center min-h-[200px]">
                 {uploading ? (
-                  <div className="upload-progress-wrap">
-                    <div className="upload-progress-bar">
-                      <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
+                  <div className="w-full">
+                    <div className="w-full bg-slate-700 h-3 rounded-full overflow-hidden mb-2">
+                      <div className="bg-indigo-500 h-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
                     </div>
-                    <span>{uploadProgress}%</span>
+                    <p className="text-center text-sm text-slate-400">{uploadProgress}% uploaded</p>
                   </div>
                 ) : (
                   <>
-                    <div className="upload-drop-zone" onClick={() => fileInputRef.current?.click()}>
-                      <span className="upload-icon">📤</span>
-                      <p>Click to select a photo or video</p>
-                      <small>Disappears after 24 hours</small>
+                    <div 
+                      className="w-full p-8 border-2 border-slate-600 border-dashed rounded-xl flex flex-col items-center text-center cursor-pointer hover:bg-slate-700/50 hover:border-indigo-500 transition-colors"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <span className="text-4xl mb-3">📤</span>
+                      <p className="font-medium text-slate-200 text-sm">Click to select photo or video</p>
+                      <small className="text-slate-500 mt-2 text-xs">Disappears after 24 hours</small>
                     </div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*,video/*"
-                      hidden
-                      onChange={handleFileChange}
-                    />
+                    <input ref={fileInputRef} type="file" accept="image/*,video/*" hidden onChange={handleFileChange} />
                   </>
                 )}
               </div>
             ) : (
-              <div className="status-text-area">
-                <div
-                  className="text-status-preview"
+              <div className="p-4 flex flex-col gap-4">
+                <div 
+                  className="aspect-square w-full rounded-xl flex items-center justify-center p-6 shadow-inner transition-colors duration-300"
                   style={{ background: TEXT_BG_GRADIENTS[textBg] }}
                 >
                   <textarea
@@ -229,20 +216,21 @@ const StatusTab = () => {
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
                     maxLength={200}
+                    className="w-full h-full bg-transparent text-white text-center text-xl font-medium resize-none focus:outline-none placeholder-white/50"
                   />
                 </div>
-                <div className="text-bg-picker">
+                <div className="flex gap-2 justify-center flex-wrap">
                   {TEXT_BG_GRADIENTS.map((g, i) => (
                     <button
                       key={i}
-                      className={`text-bg-swatch ${textBg === i ? 'active' : ''}`}
+                      className={`w-8 h-8 rounded-full border-2 transition-transform ${textBg === i ? 'border-white scale-110 shadow-lg' : 'border-transparent hover:scale-110'}`}
                       style={{ background: g }}
                       onClick={() => setTextBg(i)}
                     />
                   ))}
                 </div>
                 <button
-                  className="post-text-btn"
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 mt-2"
                   onClick={handlePostText}
                   disabled={!textInput.trim()}
                 >Post Status</button>
@@ -252,7 +240,6 @@ const StatusTab = () => {
         </div>
       )}
 
-      {/* ─── Status Viewer ─── */}
       {viewerData && (
         <StatusViewer
           groups={viewerData.groups}
@@ -269,7 +256,6 @@ const StatusTab = () => {
   );
 };
 
-// ─── Status Viewer (Full-Screen) ─────────────────────────────────────────────
 
 const StatusViewer = ({
   groups,
@@ -285,7 +271,7 @@ const StatusViewer = ({
   const [curStatus, setCurStatus] = useState(statusIndex);
   const [progress, setProgress] = useState(0);
   const timerRef = useRef(null);
-  const DURATION = 5000; // ms per status
+  const DURATION = 5000;
 
   const group = groups[curGroup] || [];
   const status = group[curStatus];
@@ -324,7 +310,6 @@ const StatusViewer = ({
     }
   };
 
-  // Auto-advance timer
   useEffect(() => {
     setProgress(0);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -341,7 +326,6 @@ const StatusViewer = ({
     return () => clearInterval(timerRef.current);
   }, [curGroup, curStatus]);
 
-  // Mark current as viewed
   useEffect(() => {
     if (status?.id) markViewed(status.id);
   }, [status?.id]);
@@ -353,79 +337,69 @@ const StatusViewer = ({
   const statusAvatar = status.userAvatar || '';
 
   return (
-    <div className="status-viewer-overlay" onClick={onClose}>
-      <div className="status-viewer" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center" onClick={onClose}>
+      <div className="relative w-full max-w-[450px] h-full sm:h-[90vh] sm:rounded-3xl overflow-hidden bg-slate-900 shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
 
         {/* Progress bars */}
-        <div className="viewer-progress-bars">
+        <div className="absolute top-0 left-0 right-0 p-3 z-10 flex gap-1 pt-4 bg-gradient-to-b from-black/50 to-transparent">
           {group.map((_, i) => (
-            <div key={i} className="viewer-progress-track">
+            <div key={i} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
               <div
-                className="viewer-progress-fill"
-                style={{
-                  width: i < curStatus ? '100%' : i === curStatus ? `${progress}%` : '0%',
-                }}
+                className="h-full bg-white transition-all duration-100 ease-linear"
+                style={{ width: i < curStatus ? '100%' : i === curStatus ? `${progress}%` : '0%' }}
               />
             </div>
           ))}
         </div>
 
         {/* Header */}
-        <div className="viewer-header">
-          <img src={statusAvatar || assets.profile_img} alt={statusUser} className="viewer-avatar" />
-          <div className="viewer-user-info">
-            <span className="viewer-name">{statusUser}</span>
-            <span className="viewer-time">{formatRelativeTime(status.createdAt)}</span>
+        <div className="absolute top-0 left-0 right-0 mt-8 p-4 z-10 flex items-center gap-3">
+          <img src={statusAvatar || assets.profile_img} alt={statusUser} className="w-10 h-10 rounded-full border border-white/50 object-cover" />
+          <div className="flex-1">
+            <p className="font-semibold text-white drop-shadow-md text-sm">{statusUser}</p>
+            <p className="text-white/80 drop-shadow-md text-xs">{formatRelativeTime(status.createdAt)}</p>
           </div>
-          <button className="viewer-close" onClick={onClose}>✕</button>
+          <button className="text-white p-2 hover:bg-white/20 rounded-full transition-colors" onClick={onClose}>✕</button>
         </div>
 
         {/* Content */}
-        <div className="viewer-content">
+        <div className="flex-1 flex items-center justify-center relative bg-black">
           {status.type === 'image' && (
-            <img src={status.mediaUrl} alt="status" className="viewer-image" />
+            <img src={status.mediaUrl} alt="status" className="w-full h-full object-contain" />
           )}
           {status.type === 'video' && (
             <video
               src={status.mediaUrl}
               autoPlay
               muted
-              className="viewer-video"
+              className="w-full h-full object-contain"
               onEnded={goNext}
             />
           )}
           {status.type === 'text' && (
             <div
-              className="viewer-text-card"
+              className="w-full h-full flex items-center justify-center p-8"
               style={{ background: textBgGradients[status.textBg ?? 0] }}
             >
-              <p>{status.text}</p>
+              <p className="text-white text-3xl font-medium text-center break-words leading-tight">{status.text}</p>
             </div>
           )}
-        </div>
 
-        {/* Tap zones */}
-        <div className="viewer-tap-prev" onClick={goPrev} />
-        <div className="viewer-tap-next" onClick={goNext} />
+          {/* Tap Zones */}
+          <div className="absolute top-20 bottom-20 left-0 w-1/3 z-20 cursor-pointer" onClick={goPrev} />
+          <div className="absolute top-20 bottom-20 right-0 w-2/3 z-20 cursor-pointer" onClick={goNext} />
+        </div>
 
         {/* Footer */}
-        <div className="viewer-footer">
-          {isOwn ? (
-            <div className="viewer-seen">
-              👁 {viewerCount} view{viewerCount !== 1 ? 's' : ''}
-            </div>
-          ) : (
-            <div className="viewer-reply-hint">
-              <span>📸 Status</span>
-            </div>
-          )}
-        </div>
+        {isOwn && (
+          <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent flex justify-center items-center pointer-events-none">
+            <span className="text-white font-medium drop-shadow-md">👁 {viewerCount} view{viewerCount !== 1 ? 's' : ''}</span>
+          </div>
+        )}
       </div>
     </div>
   );
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const formatRelativeTime = (ts) => {
   if (!ts) return '';

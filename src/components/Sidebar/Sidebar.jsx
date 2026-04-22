@@ -1,5 +1,4 @@
 import React, { useContext, useState } from 'react';
-import './LeftSidebar.css';
 import assets from '../../assets/assets';
 import { AppContext } from '../../context/AppContextProvider';
 import { useNavigate } from 'react-router-dom';
@@ -22,7 +21,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
-const LeftSidebar = () => {
+const Sidebar = () => {
 
   const {
     userData,
@@ -44,62 +43,7 @@ const LeftSidebar = () => {
   const [roomName, setRoomName] = useState('');
   const [roomSearch, setRoomSearch] = useState('');
   const [roomSearchResults, setRoomSearchResults] = useState(null);
-
-  // Theme toggle
-  const themes = ['dark', 'light', 'gradient', 'modern'];
-  const [currentTheme, setCurrentTheme] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    return themes.includes(saved) ? saved : 'dark';
-  });
-
-  const [accent, setAccent] = useState(() => {
-    return localStorage.getItem('accent') || '';
-  });
-
-  const ACCENT_OPTIONS = [
-    { id: '', label: 'Default', color: '#6366f1' },
-    { id: 'ocean', label: 'Ocean', color: '#0ea5e9' },
-    { id: 'emerald', label: 'Emerald', color: '#10b981' },
-    { id: 'rose', label: 'Rose', color: '#f43f5e' },
-    { id: 'amber', label: 'Amber', color: '#f59e0b' },
-  ];
-
-  const toggleTheme = () => {
-    const currentIndex = themes.indexOf(currentTheme);
-    const newTheme = themes[(currentIndex + 1) % themes.length];
-    setCurrentTheme(newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-  };
-
-  const getThemeIcon = () => {
-    switch (currentTheme) {
-      case 'light': return '☀️';
-      case 'dark': return '🌙';
-      case 'gradient': return '🌅';
-      case 'modern': return '🏙️';
-      default: return '🌙';
-    }
-  };
-
-  const setAccentColor = (id) => {
-    setAccent(id);
-    if (id) {
-      document.documentElement.setAttribute('data-accent', id);
-    } else {
-      document.documentElement.removeAttribute('data-accent');
-    }
-    localStorage.setItem('accent', id);
-  };
-
-  React.useEffect(() => {
-    const saved = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    const savedAccent = localStorage.getItem('accent');
-    if (savedAccent) {
-      document.documentElement.setAttribute('data-accent', savedAccent);
-    }
-  }, []);
+  const [showMenu, setShowMenu] = useState(false);
 
   // ─── 1-on-1 Chat Helpers ───
 
@@ -152,7 +96,6 @@ const LeftSidebar = () => {
         toast.success(`Connected with ${user.name || user.username || 'user'}!`);
       }
 
-      // Mark as seen when opening chat
       const updatedCurrentChat = currentChatData.map((item) => {
         if (item.rId === otherUid) {
           return { ...item, messageSeen: true };
@@ -222,7 +165,6 @@ const LeftSidebar = () => {
       setRoomName('');
       setShowCreateRoom(false);
 
-      // Auto-select the new room
       setChatType("room");
       setChatUser(null);
       setRoomData({ id: roomRef.id, name: roomName.trim(), members: [userData.uid], admins: [userData.uid] });
@@ -310,184 +252,168 @@ const LeftSidebar = () => {
   };
 
   return (
-    <div className='ls'>
-
-      <div className="ls-top">
-
-        <div className="ls-nav">
-          <img src={assets.logo} className='logo' alt="Logo" />
-          <div className="nav-right">
-            <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
-              {getThemeIcon()}
-            </button>
-            <div className="menu">
-              <img
-                src={userData?.avatar || assets.menu_icon}
-                alt=""
-                className="user-avatar"
-              />
-              <div className="sub-menu">
-                <p onClick={() => navigate('/profile')}>Edit Profile</p>
-                <hr />
-                <p className="sub-menu-label">Theme Colors</p>
-                <div className="accent-picker">
-                  {ACCENT_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      className={`accent-swatch ${accent === opt.id ? 'active' : ''}`}
-                      style={{ background: opt.color }}
-                      onClick={() => setAccentColor(opt.id)}
-                      title={opt.label}
-                    />
-                  ))}
-                </div>
-                <hr />
-                <p onClick={() => logout()}>Logout</p>
+    <div className="w-full md:w-[320px] lg:w-[360px] h-[50vh] md:h-full bg-slate-900 border-r border-slate-700/50 flex flex-col flex-shrink-0 transition-all">
+      
+      {/* Top Header */}
+      <div className="p-4 border-b border-slate-700/50">
+        <div className="flex items-center justify-between mb-4">
+          <img src={assets.logo} className="h-8" alt="Logo" />
+          <div className="relative">
+            <img
+              src={userData?.avatar || assets.menu_icon}
+              alt="Menu"
+              className="w-10 h-10 rounded-full cursor-pointer border-2 border-slate-700 hover:border-indigo-500 transition-colors object-cover"
+              onClick={() => setShowMenu(!showMenu)}
+            />
+            {showMenu && (
+              <div className="absolute right-0 top-12 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-2 z-50 animate-fadeIn">
+                <button onClick={() => navigate('/profile')} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors">Edit Profile</button>
+                <div className="border-t border-slate-700 my-1"></div>
+                <button onClick={() => logout()} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-red-400 transition-colors">Logout</button>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="ls-tabs">
+        <div className="flex bg-slate-800/50 p-1 rounded-lg mb-4 gap-1">
           <button
-            className={`ls-tab ${activeTab === 'chats' ? 'active' : ''}`}
+            className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'chats' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
             onClick={() => { setActiveTab('chats'); localStorage.setItem('ls-tab', 'chats'); }}
           >
-            💬 Chats
+            Chats
           </button>
           <button
-            className={`ls-tab ${activeTab === 'rooms' ? 'active' : ''}`}
+            className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'rooms' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
             onClick={() => { setActiveTab('rooms'); localStorage.setItem('ls-tab', 'rooms'); }}
           >
-            👥 Rooms
+            Rooms
           </button>
           <button
-            className={`ls-tab ${activeTab === 'status' ? 'active' : ''}`}
+            className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'status' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
             onClick={() => { setActiveTab('status'); localStorage.setItem('ls-tab', 'status'); }}
           >
-            📸 Status
+            Status
           </button>
         </div>
 
-        {/* Search — only shown for chats & rooms tabs */}
+        {/* Search */}
         {activeTab === 'chats' ? (
-          <div className="ls-search">
-            <img src={assets.search_icon} alt="Search Icon" />
-            <input onChange={inputHandler} type="text" placeholder='Search users...' />
+          <div className="relative flex items-center bg-slate-800 rounded-lg overflow-hidden border border-slate-700 focus-within:border-indigo-500 transition-colors">
+            <img src={assets.search_icon} alt="Search" className="w-4 h-4 ml-3 opacity-50" />
+            <input onChange={inputHandler} type="text" placeholder="Search users..." className="w-full bg-transparent border-none text-slate-200 px-3 py-2 text-sm focus:outline-none placeholder-slate-500" />
           </div>
         ) : activeTab === 'rooms' ? (
-          <div className="ls-search">
-            <img src={assets.search_icon} alt="Search Icon" />
+          <div className="relative flex items-center bg-slate-800 rounded-lg overflow-hidden border border-slate-700 focus-within:border-indigo-500 transition-colors">
+            <img src={assets.search_icon} alt="Search" className="w-4 h-4 ml-3 opacity-50" />
             <input
               value={roomSearch}
               onChange={searchRooms}
               type="text"
-              placeholder='Find rooms to join...'
+              placeholder="Find rooms to join..."
+              className="w-full bg-transparent border-none text-slate-200 px-3 py-2 text-sm focus:outline-none placeholder-slate-500"
             />
           </div>
         ) : null}
-
       </div>
 
-      <div className="ls-list">
-
+      {/* List Area */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
         {activeTab === 'status' ? (
           <StatusTab />
         ) : activeTab === 'chats' ? (
-          // ─── CHATS TAB ───
           <>
             {searchResults !== null ? (
               searchResults.length > 0 ? (
                 searchResults.map((user) => (
-                  <div key={user.id} className="friends" onClick={() => setChat(user)}>
-                    <div className="avatar-wrapper">
-                      <img src={user.avatar || assets.profile_img} alt="" />
-                      {isOnline(user.lastSeen) && <span className="online-dot"></span>}
+                  <div key={user.id} className="flex items-center gap-3 p-3 mx-2 my-1 hover:bg-slate-800 rounded-xl cursor-pointer transition-colors" onClick={() => setChat(user)}>
+                    <div className="relative">
+                      <img src={user.avatar || assets.profile_img} className="w-12 h-12 rounded-full object-cover" alt="" />
+                      {isOnline(user.lastSeen) && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full"></span>}
                     </div>
-                    <div className="friend-info">
-                      <p>{user.name || user.username}</p>
-                      <span>{user.bio || 'Hey there!'}</span>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="font-semibold text-slate-200 truncate">{user.name || user.username}</p>
+                      <p className="text-sm text-slate-400 truncate">{user.bio || 'Hey there!'}</p>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="no-results">No users found</div>
+                <div className="text-center text-slate-500 mt-6 text-sm">No users found</div>
               )
             ) : (
               chatData.length > 0 ? (
                 chatData.map((item, index) => (
                   <div
                     key={index}
-                    className={`friends ${chatType === 'user' && chatUser?.uid === item.rId ? 'active' : ''}`}
+                    className={`flex items-center gap-3 p-3 mx-2 my-1 rounded-xl cursor-pointer transition-colors ${chatType === 'user' && chatUser?.uid === item.rId ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800 border border-transparent'}`}
                     onClick={() => setChat(item)}
                   >
-                    <div className="avatar-wrapper">
-                      <img src={item.userData?.avatar || assets.profile_img} alt="" />
-                      {isOnline(item.userData?.lastSeen) && <span className="online-dot"></span>}
+                    <div className="relative">
+                      <img src={item.userData?.avatar || assets.profile_img} className="w-12 h-12 rounded-full object-cover" alt="" />
+                      {isOnline(item.userData?.lastSeen) && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full"></span>}
                     </div>
-                    <div className="friend-info">
-                      <div className="friend-top-row">
-                        <p>{item.userData?.name || item.userData?.username || 'User'}</p>
-                        <span className="chat-time">{formatChatTime(item.updatedAt)}</span>
+                    <div className="flex-1 overflow-hidden flex flex-col justify-center">
+                      <div className="flex justify-between items-baseline mb-0.5">
+                        <p className="font-semibold text-slate-200 truncate pr-2">{item.userData?.name || item.userData?.username || 'User'}</p>
+                        <span className="text-[11px] text-slate-400 whitespace-nowrap">{formatChatTime(item.updatedAt)}</span>
                       </div>
-                      <div className="friend-bottom-row">
-                        <span className={`last-msg ${!item.messageSeen ? 'unread' : ''}`}>
+                      <div className="flex justify-between items-center">
+                        <p className={`text-sm truncate pr-2 ${!item.messageSeen ? 'text-indigo-300 font-medium' : 'text-slate-400'}`}>
                           {item.lastMessage || 'Start a conversation'}
-                        </span>
-                        {!item.messageSeen && <span className="unread-badge"></span>}
+                        </p>
+                        {!item.messageSeen && <span className="w-2.5 h-2.5 bg-indigo-500 rounded-full shrink-0"></span>}
                       </div>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="no-results">Search for users to start chatting</div>
+                <div className="text-center text-slate-500 mt-6 text-sm">Search for users to start chatting</div>
               )
             )}
           </>
         ) : (
-          // ─── ROOMS TAB ───
           <>
             {/* Create Room Button */}
-            <div className="create-room-section">
+            <div className="p-3 mx-2 mt-2">
               {showCreateRoom ? (
-                <div className="create-room-form">
+                <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
                   <input
                     type="text"
                     value={roomName}
                     onChange={(e) => setRoomName(e.target.value)}
                     placeholder="Room name..."
                     onKeyDown={(e) => e.key === 'Enter' && createRoom()}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 px-3 py-2 rounded-lg text-sm mb-3 focus:outline-none focus:border-indigo-500 transition-colors"
                   />
-                  <div className="create-room-actions">
-                    <button className="create-btn" onClick={createRoom}>Create</button>
-                    <button className="cancel-btn" onClick={() => { setShowCreateRoom(false); setRoomName(''); }}>Cancel</button>
+                  <div className="flex gap-2">
+                    <button className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm py-1.5 rounded-lg transition-colors" onClick={createRoom}>Create</button>
+                    <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm py-1.5 rounded-lg transition-colors" onClick={() => { setShowCreateRoom(false); setRoomName(''); }}>Cancel</button>
                   </div>
                 </div>
               ) : (
-                <button className="create-room-btn" onClick={() => setShowCreateRoom(true)}>
-                  ＋ Create Room
+                <button className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 border-dashed text-slate-300 py-2.5 rounded-xl transition-colors text-sm font-medium" onClick={() => setShowCreateRoom(true)}>
+                  <span className="text-lg leading-none">+</span> Create Room
                 </button>
               )}
             </div>
 
-            {/* Room search results (rooms to join) */}
+            {/* Room search results */}
             {roomSearchResults !== null && (
               <>
                 {roomSearchResults.length > 0 ? (
                   roomSearchResults.map((room) => (
-                    <div key={room.id} className="friends room-item" onClick={() => joinRoom(room)}>
-                      <div className="room-icon">👥</div>
-                      <div>
-                        <p>{room.name}</p>
-                        <span>{room.members?.length || 0} members · Click to join</span>
+                    <div key={room.id} className="flex items-center gap-3 p-3 mx-2 my-1 hover:bg-slate-800 rounded-xl cursor-pointer transition-colors" onClick={() => joinRoom(room)}>
+                      <div className="w-12 h-12 bg-indigo-900/50 text-indigo-300 rounded-full flex items-center justify-center text-xl shrink-0">👥</div>
+                      <div className="flex-1 overflow-hidden">
+                        <p className="font-semibold text-slate-200 truncate">{room.name}</p>
+                        <p className="text-sm text-indigo-400 truncate">Click to join ({room.members?.length || 0} members)</p>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="no-results">No rooms found</div>
+                  <div className="text-center text-slate-500 mt-4 text-sm">No rooms found</div>
                 )}
-                <hr className="search-divider" />
+                <div className="mx-4 my-2 border-t border-slate-700/50"></div>
               </>
             )}
 
@@ -496,28 +422,27 @@ const LeftSidebar = () => {
               rooms.map((room) => (
                 <div
                   key={room.id}
-                  className={`friends room-item ${chatType === 'room' && roomData?.id === room.id ? 'active' : ''}`}
+                  className={`flex items-center gap-3 p-3 mx-2 my-1 rounded-xl cursor-pointer transition-colors ${chatType === 'room' && roomData?.id === room.id ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800 border border-transparent'}`}
                   onClick={() => selectRoom(room)}
                 >
-                  <div className="room-icon">👥</div>
-                  <div>
-                    <p>{room.name}</p>
-                    <span>{room.members?.length || 0} members</span>
+                  <div className="w-12 h-12 bg-slate-800 text-slate-300 rounded-full flex items-center justify-center text-xl shrink-0">👥</div>
+                  <div className="flex-1 overflow-hidden">
+                    <p className="font-semibold text-slate-200 truncate">{room.name}</p>
+                    <p className="text-sm text-slate-400 truncate">{room.members?.length || 0} members</p>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="no-results">
+              <div className="text-center text-slate-500 mt-6 text-sm">
                 {roomSearchResults === null ? 'Create or search for rooms' : ''}
               </div>
             )}
           </>
         )}
-
       </div>
 
     </div>
   );
 };
 
-export default LeftSidebar;
+export default Sidebar;
