@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function: Check if user is authenticated
+    function isAuth() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // 1. Users collection
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow write: if isAuth() && request.auth.uid == userId;
+    }
+
+    // 2. Messages collection (1-on-1 chats & rooms)
+    match /messages/{messageId} {
+      allow read, write: if isAuth();
+    }
+
+    // 3. Chats collection (user's active chats list)
+    match /chats/{userId} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+
+    // 4. Rooms collection (group chats)
+    match /rooms/{roomId} {
+      allow read, write: if isAuth();
+    }
+
+    // 5. Status Updates collection
+    match /statusUpdates/{statusId} {
+      allow read, write: if isAuth();
+    }
+
+    // 6. WebRTC Calls signaling
+    match /calls/{callId} {
+      allow read, write: if isAuth();
+      
+      match /callerCandidates/{candidateId} {
+        allow read, write: if isAuth();
+      }
+      
+      match /calleeCandidates/{candidateId} {
+        allow read, write: if isAuth();
+      }
+    }
+
+    // 7. Theme & Wallpaper Preferences
+    match /userPreferences/{userId} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+  }
+}
