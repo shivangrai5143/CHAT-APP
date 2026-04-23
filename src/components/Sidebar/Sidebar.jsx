@@ -52,6 +52,7 @@ const Sidebar = () => {
   };
 
   const setChat = async (user) => {
+    if (!userData?.uid) return; // guard: userData not yet loaded
     try {
       const msgId = getMessagesId(userData.uid, user.id || user.rId);
       const otherUid = user.id || user.rId;
@@ -267,9 +268,16 @@ const Sidebar = () => {
             />
             {showMenu && (
               <div className="absolute right-0 top-12 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-2 z-50 animate-fadeIn">
-                <button onClick={() => navigate('/profile')} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors">Edit Profile</button>
+                <button onClick={() => navigate('/profile')} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-2">
+                  <span>👤</span> Edit Profile
+                </button>
+                <button onClick={() => { setShowMenu(false); navigate('/settings'); }} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-2">
+                  <span>⚙️</span> Settings
+                </button>
                 <div className="border-t border-slate-700 my-1"></div>
-                <button onClick={() => logout()} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-red-400 transition-colors">Logout</button>
+                <button onClick={() => logout()} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-red-400 transition-colors flex items-center gap-2">
+                  <span>🚪</span> Logout
+                </button>
               </div>
             )}
           </div>

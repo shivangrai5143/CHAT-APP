@@ -34,6 +34,11 @@ const ChatWindow = () => {
     isBlocked,
     isBlockedBy,
     userPrivateKey,
+    startCall,        // WebRTC
+    callState,        // WebRTC
+    wallpaperStyle,   // Theme
+    blur,             // Theme
+    opacity,          // Theme
   } = useContext(AppContext);
 
   const [input, setInput] = useState('');
@@ -508,7 +513,38 @@ const ChatWindow = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          {/* Call buttons — only for 1-on-1 chats */}
+          {chatType === "user" && chatUser && (
+            <>
+              {/* Voice call */}
+              <button
+                id="voice-call-btn"
+                className="p-2 rounded-full hover:bg-slate-700 text-slate-300 transition-colors disabled:opacity-40"
+                title="Voice call"
+                disabled={callState !== 'idle'}
+                onClick={() => startCall(chatUser.uid, 'audio')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              </button>
+              {/* Video call */}
+              <button
+                id="video-call-btn"
+                className="p-2 rounded-full hover:bg-slate-700 text-slate-300 transition-colors disabled:opacity-40"
+                title="Video call"
+                disabled={callState !== 'idle'}
+                onClick={() => startCall(chatUser.uid, 'video')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                </svg>
+              </button>
+            </>
+          )}
           <div className="relative" ref={optionsRef}>
             <button
               className="p-2 rounded-full hover:bg-slate-700 text-slate-300 transition-colors"
@@ -576,8 +612,19 @@ const ChatWindow = () => {
         </div>
       )}
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-900 relative">
+      {/* Messages Area — wallpaper bg layer (blurred/transparent) + scrollable content layer */}
+      <div className="flex-1 overflow-hidden relative">
+        {/* Wallpaper background layer */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            ...wallpaperStyle,
+            opacity:  opacity  ?? 1,
+            filter:   (blur ?? 0) > 0 ? `blur(${blur}px)` : undefined,
+          }}
+        />
+        {/* Scrollable content above wallpaper */}
+        <div className="relative z-10 h-full overflow-y-auto p-4 custom-scrollbar">
         {messages.map((msg, index) => {
           const isSelf = msg.sId === userData.uid;
           const prevMsg = index > 0 ? messages[index - 1] : null;
@@ -696,7 +743,8 @@ const ChatWindow = () => {
             <span>{chatType === "room" ? "Someone is" : (chatUser?.name || chatUser?.username || "User") + " is"} typing…</span>
           </div>
         )}
-      </div>
+        </div>
+      </div>{/* end wallpaper wrapper */}
 
       {/* Clear Chat Confirmation Modal */}
       {showClearConfirm && (

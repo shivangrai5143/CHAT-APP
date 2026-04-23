@@ -19,6 +19,10 @@ import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { generateKeyPair, exportPublicKey } from "../services/cryptoService";
 import { getPrivateKey, savePrivateKey } from "../services/keyManager";
+import { useWebRTCCall } from "../hooks/useWebRTCCall";
+import { CALL_STATES } from "../hooks/useCallStateManager";
+import { SignalingService } from "../services/signalingService";
+import { useTheme } from "../hooks/useTheme";
 
 export const AppContext = createContext();
 
@@ -39,6 +43,17 @@ const AppContextProvider = ({ children }) => {
   const [userPrivateKey, setUserPrivateKey] = useState(null); // RSA CryptoKey
   const userDataRef = useRef(null);
   const tabFocusedRef = useRef(true);
+
+  // ─── WebRTC Call State ───
+  // incomingCall holds the Firestore call doc for an unanswered incoming call
+  const [incomingCall, setIncomingCall] = useState(null);
+  const incomingCallSignalingRef = useRef(null); // unsubscribe for incoming-call listener
+
+  // The call hook — receives the current uid (null-safe internally)
+  const callManager = useWebRTCCall(userData?.uid);
+
+  // ─── Theme / Wallpaper ───
+  const themeManager = useTheme(userData?.uid);
 
   // Sync ref with state
   const setUserData = useCallback((valueOrUpdater) => {
@@ -378,9 +393,10 @@ const AppContextProvider = ({ children }) => {
       // No key on this device — generate a fresh key pair
       const keyPair = await generateKeyPair();
       const jwkPublic = await exportPublicKey(keyPair.publicKey);
-      // Store public key in Firestore
+      // Store public key in Firestore — setDoc+merge works even if the
+      // publicKey field didn't previously exist on the document.
       const userRef = doc(db, "users", uid);
-      await updateDoc(userRef, { publicKey: jwkPublic });
+      await setDoc(userRef, { publicKey: jwkPublic }, { merge: true });
       // Store private key in IndexedDB
       await savePrivateKey(uid, keyPair.privateKey);
       setUserPrivateKey(keyPair.privateKey);
@@ -462,6 +478,52 @@ const AppContextProvider = ({ children }) => {
     }
   };
 
+  // ─── Incoming call listener (mirrors how status/typing listeners work) ───
+  useEffect(() => {
+    if (!userData?.uid) return;
+
+    const svc = new SignalingService(userData.uid);
+
+    const unsub = svc.listenForIncomingCalls(
+      async (callDoc) => {
+        // Ignore if already in a call
+        if (callManager.callState !== CALL_STATES.IDLE) return;
+        // Ignore our own calls (shouldn't happen, but defensive)
+        if (callDoc.callerId === userData.uid) return;
+
+        // Fetch caller display info
+        let callerName   = 'Unknown';
+        let callerAvatar = '';
+        try {
+          const snap = await getDoc(doc(db, 'users', callDoc.callerId));
+          if (snap.exists()) {
+            const d = snap.data();
+            callerName   = d.name || d.username || 'Unknown';
+            callerAvatar = d.avatar || '';
+          }
+        } catch (_) {}
+
+        setIncomingCall({ ...callDoc, callerName, callerAvatar });
+      },
+      (err) => console.error('[AppContext] incoming call listener error:', err),
+    );
+
+    incomingCallSignalingRef.current = unsub;
+    return () => { unsub(); incomingCallSignalingRef.current = null; };
+  }, [userData?.uid]); // eslint-disable-line
+
+  /** Called from IncomingCallModal → Accept */
+  const handleAnswerCall = useCallback(async (callDoc) => {
+    setIncomingCall(null);
+    await callManager.answerCall(callDoc.id, callDoc);
+  }, [callManager]);
+
+  /** Called from IncomingCallModal → Decline */
+  const handleRejectCall = useCallback(async (callId) => {
+    setIncomingCall(null);
+    await callManager.rejectCall(callId);
+  }, [callManager]);
+
   const value = {
     userData,
     setUserData,
@@ -494,6 +556,14 @@ const AppContextProvider = ({ children }) => {
     userPrivateKey,
     setUserPrivateKey,
     initEncryption,
+    // ─── Call system ───
+    incomingCall,
+    setIncomingCall,
+    handleAnswerCall,
+    handleRejectCall,
+    ...callManager,
+    // ─── Theme system ───
+    ...themeManager,
   };
 
   return (

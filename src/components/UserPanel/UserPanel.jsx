@@ -34,6 +34,11 @@ const UserPanel = () => {
     isBlocked,
     isBlockedBy,
     reportUser,
+    // Theme
+    wallpaperId,
+    wallpaperStyle,
+    setWallpaperById,
+    wallpapers,
   } = useContext(AppContext);
 
   const [memberDetails, setMemberDetails] = useState([]);
@@ -365,6 +370,44 @@ const UserPanel = () => {
           </div>
         </div>
 
+        {/* ── Theme / Wallpaper section ── */}
+        <div className="mb-6">
+          <hr className="border-slate-700/50 mb-4" />
+          <p className="font-semibold text-slate-300 mb-3 flex items-center gap-2">
+            <span>🎨</span> Chat Wallpaper
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            {(wallpapers || []).map((wp) => (
+              <button
+                key={wp.id}
+                title={wp.label}
+                onClick={() => setWallpaperById(wp.id)}
+                className={`relative h-12 rounded-xl overflow-hidden border-2 transition-all ${
+                  wallpaperId === wp.id
+                    ? 'border-indigo-500 scale-105 shadow-lg shadow-indigo-500/30'
+                    : 'border-slate-700 hover:border-slate-500'
+                }`}
+                style={wp.style}
+              >
+                {wallpaperId === wp.id && (
+                  <span className="absolute inset-0 flex items-center justify-center text-xs text-white drop-shadow">
+                    ✓
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-lg border border-slate-600 flex-shrink-0"
+              style={wallpaperStyle}
+            />
+            <p className="text-xs text-slate-400">
+              {(wallpapers || []).find(w => w.id === wallpaperId)?.label || 'Default'}
+            </p>
+          </div>
+        </div>
+
         {/* Action Buttons */}
         <div className="flex flex-col gap-3 mt-auto pt-4">
           <button 
@@ -424,17 +467,58 @@ const UserPanel = () => {
 
   // ─── Welcome State ───
   return (
-    <div className="w-full md:w-[300px] lg:w-[340px] h-[50vh] md:h-full bg-slate-900 border-l border-slate-700/50 flex flex-col flex-shrink-0 transition-all p-8 text-center items-center justify-center">
-      <img src={assets.logo_icon} className="w-16 mb-6 opacity-50 mix-blend-screen" alt="" />
-      <h3 className="text-xl font-bold text-slate-200 mb-2">Welcome to Chatapp</h3>
-      <p className="text-slate-400 text-sm max-w-[200px] mb-8">Select a user or room to view their profile</p>
-      
-      <button 
-        onClick={() => logout()} 
-        className="px-6 py-2 border border-slate-700 text-slate-300 rounded-full hover:bg-slate-800 transition-colors text-sm font-medium"
-      >
-        Logout
-      </button>
+    <div className="w-full md:w-[300px] lg:w-[340px] h-[50vh] md:h-full bg-slate-900 border-l border-slate-700/50 flex flex-col flex-shrink-0 transition-all overflow-y-auto custom-scrollbar p-6">
+      {/* Logo + welcome text */}
+      <div className="flex flex-col items-center text-center pt-8 pb-6">
+        <img src={assets.logo_icon} className="w-16 mb-4 opacity-50 mix-blend-screen" alt="" />
+        <h3 className="text-xl font-bold text-slate-200 mb-1">Welcome to Chatapp</h3>
+        <p className="text-slate-400 text-sm max-w-[200px] mb-6">Select a user or room to start chatting</p>
+        <button
+          onClick={() => logout()}
+          className="px-6 py-2 border border-slate-700 text-slate-300 rounded-full hover:bg-slate-800 transition-colors text-sm font-medium"
+        >
+          Logout
+        </button>
+      </div>
+
+      <hr className="border-slate-700/50 mb-6" />
+
+      {/* ── Theme section always visible ── */}
+      <div>
+        <p className="font-semibold text-slate-300 mb-3 flex items-center gap-2">
+          <span>🎨</span> Chat Wallpaper
+        </p>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {(wallpapers || []).map((wp) => (
+            <button
+              key={wp.id}
+              title={wp.label}
+              onClick={() => setWallpaperById(wp.id)}
+              className={`relative h-12 rounded-xl overflow-hidden border-2 transition-all ${
+                wallpaperId === wp.id
+                  ? 'border-indigo-500 scale-105 shadow-lg shadow-indigo-500/30'
+                  : 'border-slate-700 hover:border-slate-500'
+              }`}
+              style={wp.style}
+            >
+              {wallpaperId === wp.id && (
+                <span className="absolute inset-0 flex items-center justify-center text-xs text-white drop-shadow">
+                  ✓
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-8 h-8 rounded-lg border border-slate-600 flex-shrink-0"
+            style={wallpaperStyle}
+          />
+          <p className="text-xs text-slate-400">
+            Current: <span className="text-slate-300">{(wallpapers || []).find(w => w.id === wallpaperId)?.label || 'Default'}</span>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
