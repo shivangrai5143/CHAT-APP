@@ -490,6 +490,8 @@ const AppContextProvider = ({ children }) => {
         if (callManager.callState !== CALL_STATES.IDLE) return;
         // Ignore our own calls (shouldn't happen, but defensive)
         if (callDoc.callerId === userData.uid) return;
+        // Ignore calls where the offer hasn't been saved yet
+        if (!callDoc.offer || !callDoc.offer.type) return;
 
         // Fetch caller display info
         let callerName   = 'Unknown';

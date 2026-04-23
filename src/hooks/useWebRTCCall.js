@@ -221,6 +221,9 @@ export const useWebRTCCall = (userId) => {
       _setupIceCandidate(pc, incomingCallId, false);
 
       // 6. Set remote description (the caller's offer)
+      if (!incomingCallData.offer || !incomingCallData.offer.type) {
+        throw new Error('Cannot answer call: offer is not yet available. Try again shortly.');
+      }
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCallData.offer));
       await _flushPendingCandidates(pc);
 

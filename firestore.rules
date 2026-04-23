@@ -16,6 +16,11 @@ service cloud.firestore {
     // 2. Messages collection (1-on-1 chats & rooms)
     match /messages/{messageId} {
       allow read, write: if isAuth();
+
+      // Subcollection where actual chat messages live
+      match /messages/{msgDoc} {
+        allow read, write: if isAuth();
+      }
     }
 
     // 3. Chats collection (user's active chats list)
@@ -26,6 +31,22 @@ service cloud.firestore {
     // 4. Rooms collection (group chats)
     match /rooms/{roomId} {
       allow read, write: if isAuth();
+
+      // Subcollection where room messages live
+      match /messages/{msgDoc} {
+        allow read, write: if isAuth();
+      }
+    }
+
+    // 5. Typing indicators
+    match /typing/{chatId} {
+      allow read, write: if isAuth();
+    }
+
+    // 6. Reports
+    match /reports/{reportId} {
+      allow create: if isAuth();
+      allow read: if false; // reports are admin-only to read
     }
 
     // 5. Status Updates collection
