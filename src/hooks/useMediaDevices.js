@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { toast } from 'react-toastify';
 
 const DEFAULT_VIDEO_CONSTRAINTS = {
   width:     { ideal: 1280 },
@@ -67,6 +68,7 @@ export const useMediaDevices = () => {
       if (err.name === 'NotReadableError')  friendlyMessage = 'Camera/mic is already in use by another app.';
       if (err.name === 'OverconstrainedError') friendlyMessage = 'Camera does not support the requested quality.';
 
+      toast.error(friendlyMessage);
       setMediaError({ name: err.name, message: friendlyMessage });
       throw err;
     }
