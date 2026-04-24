@@ -137,20 +137,21 @@ export const useWebRTCCall = (userId) => {
       // 4. Handle remote stream
       _setupRemoteTrack(pc);
 
-      // 5. Create call doc in Firestore
-      const newCallId = await signalingRef.current.createCall(receiverId, callType);
-      _setCallId(newCallId);
-
-      // 6. Wire ICE candidate sending
-      _setupIceCandidate(pc, newCallId, true);
-
-      // 7. Create offer and set as local description
+      // 5. Create offer FIRST (before writing to Firestore)
+      //    This way we can save offer + callDoc in one atomic write so the
+      //    callee listener fires with the offer already present.
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: callType === 'video',
       });
       await pc.setLocalDescription(offer);
-      await signalingRef.current.saveOffer(newCallId, offer);
+
+      // 6. Create call doc WITH offer included (atomic) — callee sees offer immediately
+      const newCallId = await signalingRef.current.createCall(receiverId, callType, offer);
+      _setCallId(newCallId);
+
+      // 7. Wire ICE candidate sending (now we have the callId)
+      _setupIceCandidate(pc, newCallId, true);
 
       setCallState(CALL_STATES.CONNECTING);
 
@@ -185,6 +186,7 @@ export const useWebRTCCall = (userId) => {
       throw err;
     }
   }, [userId, getMediaStream, createPeerConnection]); // eslint-disable-line
+
 
   // ─── PUBLIC: Answer incoming call ───────────────────────────────────────────
   const answerCall = useCallback(async (incomingCallId, incomingCallData) => {

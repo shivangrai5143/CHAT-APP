@@ -31,14 +31,18 @@ export class SignalingService {
 
   // ─── Write Operations ────────────────────────────────────────────────────────
 
-  /** Create the initial call document. Returns the new callId. */
-  async createCall(receiverId, callType = 'video') {
+  /**
+   * Create the initial call document.
+   * Pass `offer` to save it atomically so the callee listener fires immediately.
+   * Returns the new callId.
+   */
+  async createCall(receiverId, callType = 'video', offer = null) {
     const ref = await addDoc(this.callsRef, {
       callerId:   this.userId,
       receiverId,
       callType,
       status:     'ringing',
-      offer:      null,
+      offer:      offer ? { type: offer.type, sdp: offer.sdp } : null,
       answer:     null,
       createdAt:  serverTimestamp(),
       startedAt:  null,
@@ -128,6 +132,8 @@ export class SignalingService {
 
   /**
    * Listen for incoming calls where the current user is the receiver.
+   * Handles both 'added' (new call) and 'modified' (offer saved after doc creation).
+   * Uses a local Set to avoid notifying the same call twice.
    * Returns an unsubscribe function.
    */
   listenForIncomingCalls(onIncoming, onError) {
@@ -137,12 +143,19 @@ export class SignalingService {
       where('status',     '==', 'ringing'),
     );
 
+    const notified = new Set();
+
     return onSnapshot(
       q,
       (snap) => {
         snap.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            onIncoming({ id: change.doc.id, ...change.doc.data() });
+          if (change.type === 'added' || change.type === 'modified') {
+            const data = { id: change.doc.id, ...change.doc.data() };
+            // Only notify once per call, and only once the offer is present
+            if (data.offer?.type && !notified.has(change.doc.id)) {
+              notified.add(change.doc.id);
+              onIncoming(data);
+            }
           }
         });
       },
