@@ -384,22 +384,58 @@ const AppContextProvider = ({ children }) => {
   const initEncryption = useCallback(async (uid) => {
     if (!uid) return;
     try {
-      // Try to load existing private key from IndexedDB
+      const userRef = doc(db, "users", uid);
+
+      // Helper: validate that the private key in IndexedDB matches
+      // the public key stored in Firestore by doing a test encrypt→decrypt.
+      const validateKeyPair = async (privKey, publicJwk) => {
+        try {
+          const { importPublicKey, encryptMessage, decryptMessage } = await import('../services/cryptoService');
+          const pubKey = await importPublicKey(publicJwk);
+          const { encryptedMessage, encryptedAESKey, iv } = await encryptMessage('test', pubKey);
+          await decryptMessage({ encryptedMessage, encryptedAESKey, iv }, privKey);
+          return true; // keys match
+        } catch {
+          return false; // mismatch — keys from different sessions
+        }
+      };
+
+      // Load existing private key from IndexedDB
       let privKey = await getPrivateKey(uid);
+
       if (privKey) {
-        setUserPrivateKey(privKey);
-        return;
+        // Verify it matches the public key currently in Firestore
+        const userSnap = await getDoc(userRef);
+        const firestorePublicJwk = userSnap.data()?.publicKey;
+
+        if (firestorePublicJwk) {
+          const isValid = await validateKeyPair(privKey, firestorePublicJwk);
+          if (isValid) {
+            // Keys match — use them as-is
+            setUserPrivateKey(privKey);
+            return;
+          }
+          // Keys don't match (e.g. Firestore was updated from another device)
+          console.warn('E2EE: Key mismatch detected — regenerating key pair');
+        } else {
+          // Firestore has no public key yet — re-upload ours
+          try {
+            const { exportPublicKey } = await import('../services/cryptoService');
+            // Re-derive public key from private key is not possible in WebCrypto;
+            // generate fresh pair instead.
+          } catch (_) {}
+        }
       }
-      // No key on this device — generate a fresh key pair
+
+      // Generate a fresh key pair (either no key existed or validation failed)
       const keyPair = await generateKeyPair();
       const jwkPublic = await exportPublicKey(keyPair.publicKey);
-      // Store public key in Firestore — setDoc+merge works even if the
-      // publicKey field didn't previously exist on the document.
-      const userRef = doc(db, "users", uid);
+      // Overwrite public key in Firestore with the new one
       await setDoc(userRef, { publicKey: jwkPublic }, { merge: true });
-      // Store private key in IndexedDB
+      // Store new private key in IndexedDB (overwrites old one)
       await savePrivateKey(uid, keyPair.privateKey);
       setUserPrivateKey(keyPair.privateKey);
+      console.log('E2EE: New key pair generated and registered');
     } catch (e) {
       console.error("E2EE init error:", e);
     }
