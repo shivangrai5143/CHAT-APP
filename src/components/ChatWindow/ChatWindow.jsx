@@ -447,10 +447,11 @@ const ChatWindow = () => {
         if (searchDate) {
           const msgDate = getMessageDate(msg);
           if (msgDate) {
-            const selectedDate = new Date(searchDate);
-            matchDate = msgDate.getFullYear() === selectedDate.getFullYear()
-              && msgDate.getMonth() === selectedDate.getMonth()
-              && msgDate.getDate() === selectedDate.getDate();
+            // Fix timezone issue with parsing YYYY-MM-DD
+            const [year, month, day] = searchDate.split('-').map(Number);
+            matchDate = msgDate.getFullYear() === year
+              && msgDate.getMonth() === month - 1
+              && msgDate.getDate() === day;
           } else matchDate = false;
         }
         return matchText && matchDate;
@@ -510,7 +511,7 @@ const ChatWindow = () => {
   return (
     <div className="flex-1 flex flex-col bg-slate-900 border-x border-slate-700/50 relative">
       {/* Header */}
-      <div className="h-[72px] flex items-center justify-between px-6 bg-slate-800/80 backdrop-blur-md border-b border-slate-700/50 z-10">
+      <div className="relative z-20 h-[72px] flex items-center justify-between px-6 bg-slate-800/80 backdrop-blur-md border-b border-slate-700/50">
         <div className="flex items-center gap-4">
           {chatType === "room" ? (
             <div className="w-11 h-11 bg-indigo-900/50 text-indigo-300 rounded-full flex items-center justify-center text-xl shadow-inner">👥</div>
@@ -602,7 +603,7 @@ const ChatWindow = () => {
 
       {/* Search Bar */}
       {showSearch && (
-        <div className="bg-slate-800 border-b border-slate-700/50 p-3 flex flex-wrap items-center gap-3 shadow-inner">
+        <div className="relative z-20 bg-slate-800 border-b border-slate-700/50 p-3 flex flex-wrap items-center gap-3 shadow-inner">
           <input
             type="text"
             placeholder="Search messages..."
