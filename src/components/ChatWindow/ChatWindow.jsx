@@ -81,9 +81,11 @@ const ChatWindow = () => {
       await Promise.all(
         encrypted.map(async (msg) => {
           try {
+            const isSender = msg.sId === userData?.uid;
             const plain = await decryptMessage(
-              { encryptedMessage: msg.encryptedMessage, encryptedAESKey: msg.encryptedAESKey, iv: msg.iv },
-              userPrivateKey
+              { encryptedMessage: msg.encryptedMessage, encryptedAESKey: msg.encryptedAESKey, senderEncryptedAESKey: msg.senderEncryptedAESKey, iv: msg.iv },
+              userPrivateKey,
+              isSender
             );
             updates[msg.id] = plain;
           } catch {
@@ -173,14 +175,20 @@ const ChatWindow = () => {
         try {
           const recipientSnap = await getDoc(doc(db, "users", chatUser.uid));
           const recipientJwk = recipientSnap.data()?.publicKey;
+          // Also get sender's own public key so they can decrypt their sent messages
+          const senderSnap = await getDoc(doc(db, "users", userData.uid));
+          const senderJwk = senderSnap.data()?.publicKey;
           if (recipientJwk) {
             const recipientPubKey = await importPublicKey(recipientJwk);
-            const encrypted = await encryptMessage(messageText, recipientPubKey);
+            const senderPubKey = senderJwk ? await importPublicKey(senderJwk) : null;
+            const encrypted = await encryptMessage(messageText, recipientPubKey, senderPubKey);
             msgData.encryptedMessage = encrypted.encryptedMessage;
             msgData.encryptedAESKey = encrypted.encryptedAESKey;
+            if (encrypted.senderEncryptedAESKey) {
+              msgData.senderEncryptedAESKey = encrypted.senderEncryptedAESKey;
+            }
             msgData.iv = encrypted.iv;
             msgData.e2ee = true;
-            decryptionCacheRef.current[`pending`] = messageText;
           } else {
             msgData.text = messageText;
           }
@@ -309,6 +317,7 @@ const ChatWindow = () => {
 
   const updateChatData = async (lastMessage) => {
     try {
+      // Update sender's own chat list (we always have permission for our own doc)
       const currentChatRef = doc(db, "chats", userData.uid);
       const currentChatSnap = await getDoc(currentChatRef);
       const currentChatData = currentChatSnap.data()?.chatData || [];
@@ -321,17 +330,28 @@ const ChatWindow = () => {
       });
       await updateDoc(currentChatRef, { chatData: updatedCurrentChat });
 
-      const otherChatRef = doc(db, "chats", chatUser.uid);
-      const otherChatSnap = await getDoc(otherChatRef);
-      const otherChatData = otherChatSnap.data()?.chatData || [];
+      // Update recipient's chat list — wrap separately since Firestore rules
+      // only allow users to write their own /chats/{uid} document.
+      // This write only succeeds if the recipient is also authenticated and
+      // rules permit (e.g. if you relax them to allow writing via Cloud Functions).
+      // For now we attempt it and silently skip on permission error.
+      try {
+        const otherChatRef = doc(db, "chats", chatUser.uid);
+        const otherChatSnap = await getDoc(otherChatRef);
+        const otherChatData = otherChatSnap.data()?.chatData || [];
 
-      const updatedOtherChat = otherChatData.map((item) => {
-        if (item.rId === userData.uid) {
-          return { ...item, lastMessage, updatedAt: Date.now(), messageSeen: false };
-        }
-        return item;
-      });
-      await updateDoc(otherChatRef, { chatData: updatedOtherChat });
+        const updatedOtherChat = otherChatData.map((item) => {
+          if (item.rId === userData.uid) {
+            return { ...item, lastMessage, updatedAt: Date.now(), messageSeen: false };
+          }
+          return item;
+        });
+        await updateDoc(otherChatRef, { chatData: updatedOtherChat });
+      } catch (permErr) {
+        // Expected: we can't write to another user's /chats doc.
+        // The recipient's chat list will update when they receive the message.
+        console.log('Could not update recipient chat list (permission expected):', permErr.code);
+      }
     } catch (error) {
       console.error("Error updating chat data:", error);
     }

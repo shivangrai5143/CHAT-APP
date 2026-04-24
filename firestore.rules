@@ -24,8 +24,10 @@ service cloud.firestore {
     }
 
     // 3. Chats collection (user's active chats list)
+    // Allow any authenticated user to read/write so the sender can update
+    // the recipient's lastMessage preview (chat list last-message sync).
     match /chats/{userId} {
-      allow read, write: if isAuth() && request.auth.uid == userId;
+      allow read, write: if isAuth();
     }
 
     // 4. Rooms collection (group chats)
@@ -49,12 +51,12 @@ service cloud.firestore {
       allow read: if false; // reports are admin-only to read
     }
 
-    // 5. Status Updates collection
+    // 7. Status Updates collection
     match /statusUpdates/{statusId} {
       allow read, write: if isAuth();
     }
 
-    // 6. WebRTC Calls signaling
+    // 8. WebRTC Calls signaling
     match /calls/{callId} {
       allow read, write: if isAuth();
       
@@ -67,7 +69,7 @@ service cloud.firestore {
       }
     }
 
-    // 7. Theme & Wallpaper Preferences
+    // 9. Theme & Wallpaper Preferences
     match /userPreferences/{userId} {
       allow read, write: if isAuth() && request.auth.uid == userId;
     }

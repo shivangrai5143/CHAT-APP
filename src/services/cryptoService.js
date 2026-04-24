@@ -48,17 +48,15 @@ export const importPublicKey = (jwk) =>
 
 /**
  * Encrypt a plaintext string for a recipient.
- * Flow:
- *   1. Generate a random AES-256-GCM key
- *   2. Encrypt the plaintext with the AES key
- *   3. Encrypt the AES key with the recipient's RSA public key
+ * Also encrypts the AES key with the sender's own public key so they
+ * can decrypt their own sent messages (stored as senderEncryptedAESKey).
  *
  * @param {string} plaintext
  * @param {CryptoKey} recipientPublicKey  — recipient's RSA public key
- * @returns {Promise<{ encryptedMessage: string, encryptedAESKey: string, iv: string }>}
- *   All values are Base64-encoded strings safe for Firestore storage.
+ * @param {CryptoKey|null} senderPublicKey — sender's own RSA public key (optional)
+ * @returns {Promise<{ encryptedMessage, encryptedAESKey, senderEncryptedAESKey, iv }>}
  */
-export const encryptMessage = async (plaintext, recipientPublicKey) => {
+export const encryptMessage = async (plaintext, recipientPublicKey, senderPublicKey = null) => {
   // 1. Generate a one-time AES-256-GCM key
   const aesKey = await window.crypto.subtle.generateKey(
     { name: 'AES-GCM', length: 256 },
@@ -75,17 +73,35 @@ export const encryptMessage = async (plaintext, recipientPublicKey) => {
     encodedText
   );
 
-  // 3. Export the raw AES key bytes and encrypt with RSA public key
+  // 3. Export the raw AES key bytes
   const rawAesKey = await window.crypto.subtle.exportKey('raw', aesKey);
+
+  // 4. Encrypt the AES key for the recipient
   const encryptedAesKeyBuffer = await window.crypto.subtle.encrypt(
     { name: 'RSA-OAEP' },
     recipientPublicKey,
     rawAesKey
   );
 
+  // 5. Also encrypt AES key for the sender (so sender can decrypt their own msgs)
+  let senderEncryptedAESKey = null;
+  if (senderPublicKey) {
+    try {
+      const senderEncBuf = await window.crypto.subtle.encrypt(
+        { name: 'RSA-OAEP' },
+        senderPublicKey,
+        rawAesKey
+      );
+      senderEncryptedAESKey = bufferToBase64(senderEncBuf);
+    } catch (_) {
+      // Non-fatal: sender just won't be able to decrypt their own message
+    }
+  }
+
   return {
     encryptedMessage: bufferToBase64(encryptedBuffer),
     encryptedAESKey: bufferToBase64(encryptedAesKeyBuffer),
+    senderEncryptedAESKey,
     iv: bufferToBase64(iv),
   };
 };
@@ -94,19 +110,41 @@ export const encryptMessage = async (plaintext, recipientPublicKey) => {
 
 /**
  * Decrypt an encrypted message object using the current user's private RSA key.
- * @param {{ encryptedMessage: string, encryptedAESKey: string, iv: string }} payload
+ * Tries senderEncryptedAESKey first (for sender's own messages), then encryptedAESKey.
+ *
+ * @param {{ encryptedMessage, encryptedAESKey, senderEncryptedAESKey, iv }} payload
  * @param {CryptoKey} privateKey — user's RSA private key from IndexedDB
+ * @param {boolean} isSender — true if the current user sent this message
  * @returns {Promise<string>} — decrypted plaintext
  */
-export const decryptMessage = async ({ encryptedMessage, encryptedAESKey, iv }, privateKey) => {
-  // 1. Decrypt the AES key with our RSA private key
-  const aesKeyBuffer = await window.crypto.subtle.decrypt(
-    { name: 'RSA-OAEP' },
-    privateKey,
-    base64ToBuffer(encryptedAESKey)
-  );
+export const decryptMessage = async ({ encryptedMessage, encryptedAESKey, senderEncryptedAESKey, iv }, privateKey, isSender = false) => {
+  // Determine which encrypted AES key to use:
+  // - If we're the sender, try our own copy first (senderEncryptedAESKey)
+  // - Otherwise, use the recipient's copy (encryptedAESKey)
+  const keyVersionsToTry = [];
+  if (isSender && senderEncryptedAESKey) keyVersionsToTry.push(senderEncryptedAESKey);
+  keyVersionsToTry.push(encryptedAESKey);
+  if (!isSender && senderEncryptedAESKey) keyVersionsToTry.push(senderEncryptedAESKey);
 
-  // 2. Re-import the raw AES key
+  let aesKeyBuffer = null;
+  for (const keyB64 of keyVersionsToTry) {
+    try {
+      aesKeyBuffer = await window.crypto.subtle.decrypt(
+        { name: 'RSA-OAEP' },
+        privateKey,
+        base64ToBuffer(keyB64)
+      );
+      break; // success
+    } catch (_) {
+      // try next key
+    }
+  }
+
+  if (!aesKeyBuffer) {
+    throw new Error('Could not decrypt AES key with available private key');
+  }
+
+  // Re-import the raw AES key
   const aesKey = await window.crypto.subtle.importKey(
     'raw',
     aesKeyBuffer,
@@ -115,7 +153,7 @@ export const decryptMessage = async ({ encryptedMessage, encryptedAESKey, iv }, 
     ['decrypt']
   );
 
-  // 3. Decrypt the message
+  // Decrypt the message
   const decryptedBuffer = await window.crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: base64ToBuffer(iv) },
     aesKey,
