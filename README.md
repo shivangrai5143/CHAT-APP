@@ -1,4 +1,4 @@
-# 💬 Real-Time Chat Applicationnn
+# 💬 Real-Time Chat Application
 
 A full-stack **real-time chat application** built with **React.js, Firebase, and WebRTC**, designed for seamless, secure, and instant communication.
 
