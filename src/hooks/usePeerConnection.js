@@ -32,11 +32,7 @@ export const usePeerConnection = () => {
       const s = pc.connectionState;
       console.log('[PC] connectionState →', s);
       setConnectionState(s);
-
-      if (s === 'failed') {
-        console.warn('[PC] Connection failed — attempting ICE restart');
-        pc.restartIce();
-      }
+      // Note: ICE restart on 'failed' is handled by the caller in useWebRTCCall.js
       callbacks.onConnectionStateChange?.(s);
     };
 

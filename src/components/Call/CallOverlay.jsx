@@ -111,7 +111,7 @@ const CallOverlay = ({
       {/* ── Remote video / waiting screen ─── */}
       <div className="flex-1 relative overflow-hidden bg-slate-900">
 
-        {isActive && remoteStream ? (
+        {remoteStream ? (
           <video
             ref={remoteVideoRef}
             id="remote-video"

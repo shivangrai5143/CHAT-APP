@@ -89,10 +89,15 @@ export const useWebRTCCall = (userId) => {
   const _setupRemoteTrack = (pc) => {
     pc.ontrack = (event) => {
       console.log('[WebRTC] Remote track received:', event.track.kind);
-      if (event.streams?.[0]) {
-        setRemoteStream(event.streams[0]);
-        setCallState(CALL_STATES.ACTIVE);
-      }
+      // Use streams[0] if available; otherwise build a stream from the track
+      const stream = event.streams?.[0] ?? (() => {
+        const s = new MediaStream();
+        s.addTrack(event.track);
+        return s;
+      })();
+      setRemoteStream(stream);
+      // Always mark as active — don't gate on connectionState
+      setCallState(CALL_STATES.ACTIVE);
     };
   };
 
@@ -123,11 +128,27 @@ export const useWebRTCCall = (userId) => {
 
       // 2. Create peer connection
       const pc = createPeerConnection({
-        onConnectionStateChange: (s) => {
+        onConnectionStateChange: async (s) => {
           if (s === 'connected')    setCallState(CALL_STATES.ACTIVE);
           if (s === 'disconnected') setCallState(CALL_STATES.RECONNECTING);
-          if (s === 'failed')       setCallState(CALL_STATES.FAILED);
           if (s === 'closed')       setCallState(CALL_STATES.ENDED);
+          // On 'failed': restart ICE properly by creating a new offer
+          if (s === 'failed') {
+            console.warn('[PC] Connection failed — attempting ICE restart with new offer');
+            setCallState(CALL_STATES.RECONNECTING);
+            try {
+              if (pc.signalingState !== 'closed') {
+                const restartOffer = await pc.createOffer({ iceRestart: true });
+                await pc.setLocalDescription(restartOffer);
+                // Save the new offer so the callee can answer it
+                const cid = callIdRef.current;
+                if (cid) await signalingRef.current?.saveOffer(cid, restartOffer);
+              }
+            } catch (e) {
+              console.error('[PC] ICE restart offer failed:', e);
+              setCallState(CALL_STATES.FAILED);
+            }
+          }
         },
       });
 
@@ -157,13 +178,20 @@ export const useWebRTCCall = (userId) => {
 
       // 8. Listen for answer + status updates from callee
       const unsubCall = signalingRef.current.listenToCall(newCallId, async (data) => {
-        // Answer arrived
-        if (data.answer && pc.signalingState === 'have-local-offer') {
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            await _flushPendingCandidates(pc);
-          } catch (e) {
-            console.error('[WebRTC] setRemoteDescription (answer) failed:', e);
+        // Answer arrived (handle both initial answer and ICE-restart answer)
+        if (data.answer && (
+          pc.signalingState === 'have-local-offer' ||
+          pc.signalingState === 'stable' // after ICE restart
+        )) {
+          // Only apply if this answer is different from what we already have
+          const currentRemoteSdp = pc.remoteDescription?.sdp;
+          if (!currentRemoteSdp || currentRemoteSdp !== data.answer.sdp) {
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+              await _flushPendingCandidates(pc);
+            } catch (e) {
+              console.error('[WebRTC] setRemoteDescription (answer) failed:', e);
+            }
           }
         }
         // Remote hung up or rejected
@@ -208,8 +236,12 @@ export const useWebRTCCall = (userId) => {
         onConnectionStateChange: (s) => {
           if (s === 'connected')    setCallState(CALL_STATES.ACTIVE);
           if (s === 'disconnected') setCallState(CALL_STATES.RECONNECTING);
-          if (s === 'failed')       setCallState(CALL_STATES.FAILED);
           if (s === 'closed')       setCallState(CALL_STATES.ENDED);
+          // On 'failed': re-answer the caller's ICE restart offer
+          if (s === 'failed') {
+            console.warn('[PC] Callee: connection failed, waiting for ICE restart offer from caller');
+            setCallState(CALL_STATES.RECONNECTING);
+          }
         },
       });
 
@@ -243,9 +275,27 @@ export const useWebRTCCall = (userId) => {
       );
       _addUnsub(unsubIce);
 
-      // 9. Listen for call status changes (caller hangs up)
-      const unsubCall = signalingRef.current.listenToCall(incomingCallId, (data) => {
-        if (data.status === 'ended') _reset();
+      // 9. Listen for call status changes (caller hangs up, or ICE restart offer)
+      const unsubCall = signalingRef.current.listenToCall(incomingCallId, async (data) => {
+        if (data.status === 'ended') { _reset(); return; }
+        if (data.status === 'rejected') { _reset(); return; }
+
+        // Handle ICE restart: caller sent a new offer (iceRestart)
+        if (data.offer && pc.signalingState === 'stable') {
+          const currentRemoteSdp = pc.remoteDescription?.sdp;
+          if (currentRemoteSdp && currentRemoteSdp !== data.offer.sdp) {
+            try {
+              console.log('[WebRTC] Applying ICE restart offer from caller');
+              await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+              await _flushPendingCandidates(pc);
+              const restartAnswer = await pc.createAnswer();
+              await pc.setLocalDescription(restartAnswer);
+              await signalingRef.current.saveAnswer(incomingCallId, restartAnswer);
+            } catch (e) {
+              console.error('[WebRTC] ICE restart re-answer failed:', e);
+            }
+          }
+        }
       });
       _addUnsub(unsubCall);
 
