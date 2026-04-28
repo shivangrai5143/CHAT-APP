@@ -43,6 +43,10 @@ export const useWebRTCCall = (userId) => {
   const signalingRef     = useRef(null);  // SignalingService instance
   const unsubscribersRef = useRef([]);    // all active Firestore listeners
 
+  // To avoid infinite loops caused by SDP normalization when comparing strings:
+  const lastProcessedOfferSdpRef = useRef(null);
+  const lastProcessedAnswerSdpRef = useRef(null);
+
   // ICE candidates that arrive before remote description is set
   const pendingCandidatesRef = useRef([]);
 
@@ -184,9 +188,9 @@ export const useWebRTCCall = (userId) => {
           pc.signalingState === 'stable' // after ICE restart
         )) {
           // Only apply if this answer is different from what we already have
-          const currentRemoteSdp = pc.remoteDescription?.sdp;
-          if (!currentRemoteSdp || currentRemoteSdp !== data.answer.sdp) {
+          if (lastProcessedAnswerSdpRef.current !== data.answer.sdp) {
             try {
+              lastProcessedAnswerSdpRef.current = data.answer.sdp;
               await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
               await _flushPendingCandidates(pc);
             } catch (e) {
@@ -259,6 +263,7 @@ export const useWebRTCCall = (userId) => {
         throw new Error('Cannot answer call: offer is not yet available. Try again shortly.');
       }
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCallData.offer));
+      lastProcessedOfferSdpRef.current = incomingCallData.offer.sdp;
       await _flushPendingCandidates(pc);
 
       // 7. Create and save answer
@@ -282,10 +287,10 @@ export const useWebRTCCall = (userId) => {
 
         // Handle ICE restart: caller sent a new offer (iceRestart)
         if (data.offer && pc.signalingState === 'stable') {
-          const currentRemoteSdp = pc.remoteDescription?.sdp;
-          if (currentRemoteSdp && currentRemoteSdp !== data.offer.sdp) {
+          if (lastProcessedOfferSdpRef.current !== data.offer.sdp) {
             try {
               console.log('[WebRTC] Applying ICE restart offer from caller');
+              lastProcessedOfferSdpRef.current = data.offer.sdp;
               await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
               await _flushPendingCandidates(pc);
               const restartAnswer = await pc.createAnswer();
