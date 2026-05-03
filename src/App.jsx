@@ -31,6 +31,10 @@ const App = () => {
     endCall,
     toggleVideo,
     toggleAudio,
+    isScreenSharing,
+    toggleScreenShare,
+    isRecordingCall,
+    toggleCallRecording,
     incomingCall,
     handleAnswerCall,
     handleRejectCall,
@@ -81,12 +85,16 @@ const App = () => {
           remoteStream={remoteStream}
           isVideoEnabled={isVideoEnabled}
           isAudioEnabled={isAudioEnabled}
+          isScreenSharing={isScreenSharing}
+          isRecordingCall={isRecordingCall}
           isCaller={isCaller}
           pcRef={pcRef}
           chatUser={chatUser}
           onEndCall={endCall}
           onToggleVideo={toggleVideo}
           onToggleAudio={toggleAudio}
+          onToggleScreenShare={toggleScreenShare}
+          onToggleRecording={toggleCallRecording}
         />
       )}
     </>

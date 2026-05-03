@@ -18,6 +18,9 @@ import { db } from '../../config/firebase';
 import { toast } from 'react-toastify';
 import EmojiPicker from 'emoji-picker-react';
 import { encryptMessage, decryptMessage, importPublicKey } from '../../services/cryptoService';
+import { getSmartReplies, summarizeChat, translateText, SUPPORTED_LANGS } from '../../services/aiService';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
+import VoiceNotePlayer from './VoiceNotePlayer';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
@@ -49,10 +52,20 @@ const ChatWindow = () => {
   const [searchDate, setSearchDate] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
   const [activeReactionMsg, setActiveReactionMsg] = useState(null);
-  
-  // Options menu state
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  // ── New features ──
+  const [replyingTo, setReplyingTo] = useState(null); // { id, displayText, senderName }
+  const [disappearTimer, setDisappearTimer] = useState(0); // seconds; 0 = off
+  const [smartReplies, setSmartReplies] = useState([]);
+  const [chatSummary, setChatSummary] = useState('');
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [translatedMsgs, setTranslatedMsgs] = useState({});
+  const [showDisappearPicker, setShowDisappearPicker] = useState(false);
+
+  // Voice recorder
+  const { isRecording, audioBlob, audioUrl, duration, startRecording, stopRecording, cancelRecording, clearRecording } = useVoiceRecorder();
 
   const scrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -97,6 +110,19 @@ const ChatWindow = () => {
       setDecryptedTexts((prev) => ({ ...prev, ...updates }));
     })();
   }, [messages, userPrivateKey, chatType]);
+
+  // Smart replies — fire when last message is from the other person
+  useEffect(() => {
+    if (chatType !== 'user' || !messages.length || !import.meta.env.VITE_GEMINI_API_KEY) return;
+    const last = messages[messages.length - 1];
+    if (last?.sId === userData?.uid) { setSmartReplies([]); return; }
+    const history = messages.slice(-6).map((m) => ({
+      sender: m.sId === userData?.uid ? 'me' : 'them',
+      text: m.text || decryptedTexts[m.id] || '',
+    })).filter((m) => m.text);
+    if (!history.length) return;
+    getSmartReplies(history).then((r) => { if (r?.length) setSmartReplies(r); }).catch(() => {});
+  }, [messages]); // eslint-disable-line
 
   // Click outside handlers
   useEffect(() => {
@@ -159,6 +185,8 @@ const ChatWindow = () => {
       const messageText = input.trim();
       setInput('');
       setShowEmojiPicker(false);
+      setReplyingTo(null);
+      setSmartReplies([]);
 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       setTyping(messagesId, false);
@@ -169,6 +197,8 @@ const ChatWindow = () => {
         sId: userData.uid,
         createdAt: serverTimestamp(),
         status: 'sent',
+        ...(replyingTo ? { replyTo: { id: replyingTo.id, text: replyingTo.displayText, senderName: replyingTo.senderName } } : {}),
+        ...(disappearTimer > 0 ? { expiresAt: Date.now() + disappearTimer * 1000 } : {}),
       };
 
       if (chatType === "user" && chatUser && userPrivateKey) {
@@ -288,6 +318,51 @@ const ChatWindow = () => {
       console.error("Error sending file:", error);
       toast.error("Failed to send file");
     }
+  };
+
+  // Send voice note
+  const sendVoiceNote = async () => {
+    if (!audioBlob || !messagesId) return;
+    try {
+      const fd = new FormData();
+      fd.append('file', audioBlob, 'voice.webm');
+      fd.append('upload_preset', 'Chat_Images');
+      const res = await fetch('https://api.cloudinary.com/v1_1/du3hiflqj/auto/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.secure_url) throw new Error('Upload failed');
+      const parentCollection = chatType === 'room' ? 'rooms' : 'messages';
+      const msgData = {
+        sId: userData.uid,
+        createdAt: serverTimestamp(),
+        status: 'sent',
+        voiceUrl: data.secure_url,
+        voiceDuration: duration,
+        ...(chatType === 'room' ? { sName: userData.name || 'User', sAvatar: userData.avatar || '' } : {}),
+      };
+      await addDoc(collection(db, parentCollection, messagesId, 'messages'), msgData);
+      if (chatType === 'user' && chatUser) await updateChatData('🎤 Voice message');
+      clearRecording();
+    } catch (err) {
+      console.error('Voice send error:', err);
+      toast.error('Failed to send voice note');
+    }
+  };
+
+  // Summarize chat
+  const handleSummarize = async () => {
+    setIsSummarizing(true);
+    setShowSummaryModal(true);
+    const msgs = messages.map((m) => ({ senderName: m.sName || (m.sId === userData?.uid ? 'Me' : chatUser?.name || 'Them'), text: m.text || decryptedTexts[m.id] || '' }));
+    const summary = await summarizeChat(msgs).catch(() => 'Could not generate summary.');
+    setChatSummary(summary || 'No content to summarize.');
+    setIsSummarizing(false);
+  };
+
+  // Translate a message
+  const handleTranslate = async (msgId, text, lang) => {
+    if (!text) return;
+    const translated = await translateText(text, lang).catch(() => null);
+    if (translated) setTranslatedMsgs((prev) => ({ ...prev, [msgId]: translated }));
   };
 
   const addReaction = async (msgId, emoji) => {
@@ -443,7 +518,10 @@ const ChatWindow = () => {
     ? messages.map((msg, idx) => ({ msg, idx })).filter(({ msg }) => {
         let matchText = true;
         let matchDate = true;
-        if (searchQuery) matchText = msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase());
+        if (searchQuery) {
+          const plain = msg.text || decryptedTexts[msg.id] || '';
+          matchText = plain.toLowerCase().includes(searchQuery.toLowerCase());
+        }
         if (searchDate) {
           const msgDate = getMessageDate(msg);
           if (msgDate) {
@@ -575,24 +653,30 @@ const ChatWindow = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
             </button>
             {showOptionsMenu && (
-              <div className="absolute right-0 top-12 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-2 z-50">
-                <button
-                  className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-3"
-                  onClick={() => {
-                    setShowOptionsMenu(false);
-                    setShowSearch(true);
-                  }}
-                >
-                  <span>📅</span> Search by Date
+              <div className="absolute right-0 top-12 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-2 z-50">
+                <button className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-3" onClick={() => { setShowOptionsMenu(false); setShowSearch(true); }}>
+                  <span>🔍</span> Search Messages
                 </button>
-                <div className="border-t border-slate-700/50 my-1"></div>
-                <button
-                  className="w-full text-left px-4 py-2 hover:bg-slate-700 text-red-400 transition-colors flex items-center gap-3"
-                  onClick={() => {
-                    setShowOptionsMenu(false);
-                    setShowClearConfirm(true);
-                  }}
-                >
+                {chatType === 'user' && (
+                  <button className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-3" onClick={() => { setShowOptionsMenu(false); handleSummarize(); }}>
+                    <span>🤖</span> AI Summary
+                  </button>
+                )}
+                <button className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-3" onClick={() => { setShowDisappearPicker((v) => !v); }}>
+                  <span>⏱</span> {disappearTimer > 0 ? `Disappear: ${disappearTimer}s` : 'Disappearing Msgs'}
+                </button>
+                {showDisappearPicker && (
+                  <div className="px-4 py-2 flex flex-wrap gap-1">
+                    {[0,30,60,300,3600].map((v) => (
+                      <button key={v} onClick={() => { setDisappearTimer(v); setShowDisappearPicker(false); setShowOptionsMenu(false); }}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors ${disappearTimer === v ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-600 text-slate-300 hover:bg-slate-700'}`}>
+                        {v === 0 ? 'Off' : v < 60 ? `${v}s` : v < 3600 ? `${v/60}m` : '1h'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="border-t border-slate-700/50 my-1" />
+                <button className="w-full text-left px-4 py-2 hover:bg-slate-700 text-red-400 transition-colors flex items-center gap-3" onClick={() => { setShowOptionsMenu(false); setShowClearConfirm(true); }}>
                   <span>🗑️</span> Clear Chat
                 </button>
               </div>
@@ -646,7 +730,7 @@ const ChatWindow = () => {
         />
         {/* Scrollable content above wallpaper */}
         <div className="relative z-10 h-full overflow-y-auto p-4 custom-scrollbar">
-        {messages.map((msg, index) => {
+        {messages.filter((m) => !m.expiresAt || m.expiresAt > Date.now()).map((msg, index) => {
           const isSelf = msg.sId === userData.uid;
           const prevMsg = index > 0 ? messages[index - 1] : null;
           const showDateSep = !prevMsg || getDateKey(msg) !== getDateKey(prevMsg);
@@ -678,13 +762,25 @@ const ChatWindow = () => {
                     <span className="text-xs text-slate-400 mb-1 ml-1">{msg.sName || 'User'}</span>
                   )}
 
+                  {/* Reply Quote */}
+                  {msg.replyTo && (
+                    <div className={`text-xs px-3 py-1.5 mb-1 rounded-lg border-l-2 border-indigo-400 max-w-[90%] ${isSelf ? 'bg-indigo-900/40' : 'bg-slate-700/60'}`}>
+                      <p className="font-medium text-indigo-300 truncate">{msg.replyTo.senderName}</p>
+                      <p className="text-slate-400 truncate">{msg.replyTo.text || '🎤 Voice note'}</p>
+                    </div>
+                  )}
                   {/* Message Content */}
                   <div 
                     className="relative group"
                     onMouseEnter={() => setActiveReactionMsg(msg.id)}
                     onMouseLeave={() => setActiveReactionMsg(null)}
                   >
-                    {msg.image ? (
+                    {msg.voiceUrl ? (
+                      <div className={`px-3 py-2 rounded-2xl shadow-md ${isSelf ? 'bg-indigo-600' : 'bg-slate-800 border border-slate-700/50'}`}>
+                        <VoiceNotePlayer url={msg.voiceUrl} duration={msg.voiceDuration || 0} isSelf={isSelf} />
+                        {msg.voiceTranscription && <p className="text-xs mt-1.5 opacity-70 italic">{msg.voiceTranscription}</p>}
+                      </div>
+                    ) : msg.image ? (
                       <img src={msg.image} className="max-w-[240px] rounded-2xl cursor-pointer shadow-md hover:opacity-90 transition-opacity" alt="attachment" onClick={() => window.open(msg.image, '_blank')} />
                     ) : msg.fileUrl ? (
                       <div className={`flex items-center gap-3 p-3 rounded-2xl shadow-md ${isSelf ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}`}>
@@ -741,10 +837,16 @@ const ChatWindow = () => {
                     )}
                   </div>
 
-                  {/* Meta: Time and Receipt */}
+                  {/* Meta: Time, Receipt, Reply button */}
                   <div className={`flex items-center gap-1 mt-1 text-[11px] text-slate-500 ${isSelf ? 'justify-end' : 'justify-start'}`}>
                     <p>{formatTime(msg.createdAt)}</p>
                     {renderReceipt(msg)}
+                    {msg.expiresAt && <span className="text-amber-500 ml-1">⏱</span>}
+                    <button
+                      className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-indigo-400"
+                      title="Reply"
+                      onClick={() => setReplyingTo({ id: msg.id, displayText: msg.text || decryptedTexts[msg.id] || '🎤 Voice note', senderName: isSelf ? (userData?.name || 'Me') : (chatUser?.name || msg.sName || 'User') })}
+                    >↩</button>
                   </div>
 
                 </div>
@@ -782,6 +884,29 @@ const ChatWindow = () => {
         </div>
       )}
 
+      {/* AI Summary Modal */}
+      {showSummaryModal && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end justify-center sm:items-center">
+          <div className="bg-slate-800 border border-slate-700 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md mx-0 sm:mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🤖</span>
+                <h4 className="text-lg font-semibold text-white">AI Chat Summary</h4>
+              </div>
+              <button onClick={() => setShowSummaryModal(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+            {isSummarizing ? (
+              <div className="flex items-center gap-3 py-4 text-slate-400">
+                <span className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                Generating summary with Gemini...
+              </div>
+            ) : (
+              <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-line bg-slate-900/50 rounded-xl p-4">{chatSummary}</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Blocked Banner */}
       {chatDisabled && chatType === "user" && (
         <div className="bg-red-900/30 border-t border-red-500/30 text-red-400 py-3 px-4 text-center text-sm">
@@ -794,53 +919,102 @@ const ChatWindow = () => {
 
       {/* Input Area */}
       {!chatDisabled && (
-        <div className="p-4 bg-slate-800/80 backdrop-blur-md border-t border-slate-700/50 flex items-center gap-3">
-          <div className="relative" ref={emojiRef}>
-            <button className="text-2xl text-slate-400 hover:text-indigo-400 transition-colors" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emoji">😊</button>
-            {showEmojiPicker && (
-              <div className="absolute bottom-12 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-700">
-                <EmojiPicker
-                  onEmojiClick={onEmojiClick}
-                  theme="dark"
-                  width={320}
-                  height={400}
-                  searchDisabled={false}
-                  skinTonesDisabled
-                  previewConfig={{ showPreview: false }}
+        <div className="bg-slate-800/80 backdrop-blur-md border-t border-slate-700/50">
+
+          {/* Reply Preview */}
+          {replyingTo && (
+            <div className="flex items-center gap-3 px-4 pt-2.5 pb-0">
+              <div className="flex-1 bg-indigo-900/30 border-l-2 border-indigo-400 px-3 py-1.5 rounded-r-lg min-w-0">
+                <p className="text-xs text-indigo-300 font-medium">{replyingTo.senderName}</p>
+                <p className="text-xs text-slate-400 truncate">{replyingTo.displayText}</p>
+              </div>
+              <button onClick={() => setReplyingTo(null)} className="text-slate-500 hover:text-white p-1 flex-shrink-0">✕</button>
+            </div>
+          )}
+
+          {/* Voice recording preview */}
+          {audioBlob && !isRecording && (
+            <div className="flex items-center gap-3 px-4 pt-2.5 pb-0">
+              <VoiceNotePlayer url={audioUrl} duration={duration} isSelf />
+              <button onClick={clearRecording} className="text-slate-500 hover:text-red-400 p-1">✕</button>
+              <button onClick={sendVoiceNote} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-lg font-medium">Send 🎤</button>
+            </div>
+          )}
+
+          {/* Smart Reply Chips */}
+          {smartReplies.length > 0 && !input && !replyingTo && !audioBlob && (
+            <div className="flex gap-2 px-4 pt-2 overflow-x-auto custom-scrollbar pb-0" style={{scrollbarWidth:'none'}}>
+              {smartReplies.map((r, i) => (
+                <button key={i} onClick={() => { setInput(r); setSmartReplies([]); }}
+                  className="flex-shrink-0 text-xs px-3 py-1.5 bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 rounded-full hover:bg-indigo-600/40 transition-colors whitespace-nowrap">
+                  {r}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Disappear timer notice */}
+          {disappearTimer > 0 && (
+            <p className="px-4 pt-1.5 text-[10px] text-amber-400/60">⏱ Messages disappear after {disappearTimer < 60 ? `${disappearTimer}s` : disappearTimer < 3600 ? `${disappearTimer/60}m` : '1h'}</p>
+          )}
+
+          {/* Main row */}
+          <div className="p-4 flex items-center gap-3">
+            <div className="relative" ref={emojiRef}>
+              <button className="text-2xl text-slate-400 hover:text-indigo-400 transition-colors" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emoji">😊</button>
+              {showEmojiPicker && (
+                <div className="absolute bottom-12 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-700">
+                  <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" width={320} height={400} searchDisabled={false} skinTonesDisabled previewConfig={{ showPreview: false }} />
+                </div>
+              )}
+            </div>
+
+            {/* Mic button */}
+            {!audioBlob && (
+              <button
+                onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={() => { if (isRecording) stopRecording(); }}
+                onTouchStart={(e) => { e.preventDefault(); startRecording(); }} onTouchEnd={stopRecording}
+                className={`flex-shrink-0 transition-all ${isRecording ? 'text-red-400 scale-125' : 'text-slate-400 hover:text-indigo-400'}`}
+                title={isRecording ? 'Recording… release to stop' : 'Hold to record voice note'}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 01-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              </button>
+            )}
+
+            {isRecording ? (
+              <div className="flex-1 flex items-center gap-2">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-red-400 text-sm font-medium">Recording {duration}s… release to stop</span>
+                <button onClick={cancelRecording} className="ml-auto text-xs text-slate-400 hover:text-white">Cancel</button>
+              </div>
+            ) : (
+              <div className="flex-1 relative">
+                <input
+                  type="text" placeholder={chatType === 'room' ? 'Message the room...' : 'Type a message…'}
+                  value={input} onChange={handleInputChange} onKeyDown={handleKeyPress}
+                  className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-full focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder-slate-500"
                 />
               </div>
             )}
-          </div>
 
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              placeholder="Type a message..."
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyPress}
-              className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-full focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder-slate-500"
-            />
-          </div>
+            <input type="file" id="fileUpload" accept="image/*,.pdf,.doc,.docx,.txt,.zip,.xls,.xlsx,.ppt,.pptx" hidden onChange={sendFile} />
+            <label htmlFor="fileUpload" className="cursor-pointer text-slate-400 hover:text-indigo-400 transition-colors p-2 flex-shrink-0" title="Attach file">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+            </label>
 
-          <input
-            type="file"
-            id="fileUpload"
-            accept="image/*,.pdf,.doc,.docx,.txt,.zip,.xls,.xlsx,.ppt,.pptx"
-            hidden
-            onChange={sendFile}
-          />
-          <label htmlFor="fileUpload" className="cursor-pointer text-slate-400 hover:text-indigo-400 transition-colors p-2" title="Attach file">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
-          </label>
-          
-          <button 
-            onClick={sendMessage} 
-            className="w-12 h-12 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/30 transition-transform active:scale-95 disabled:opacity-50"
-            disabled={!input.trim()}
-          >
-            <svg className="w-5 h-5 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
-          </button>
+            <button
+              onClick={audioBlob ? sendVoiceNote : sendMessage}
+              disabled={!audioBlob && !input.trim()}
+              className="w-12 h-12 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/30 transition-transform active:scale-95 disabled:opacity-50 flex-shrink-0"
+            >
+              <svg className="w-5 h-5 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
+            </button>
+          </div>
         </div>
       )}
     </div>

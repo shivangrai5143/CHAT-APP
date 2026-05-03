@@ -36,6 +36,12 @@ export const useWebRTCCall = (userId) => {
   const [callId,       setCallId]       = useState(null);
   const [isCaller,     setIsCaller]     = useState(false);
   const [remoteStream, setRemoteStream] = useState(null);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isRecordingCall,  setIsRecordingCall]  = useState(false);
+
+  const screenShareStreamRef = useRef(null);
+  const mediaRecorderRef     = useRef(null);
+  const recordingChunksRef   = useRef([]);
 
   // ─── Refs (prevent stale closures inside async callbacks) ───────────────────
   const callIdRef        = useRef(null);  // mirrors callId state
@@ -320,6 +326,71 @@ export const useWebRTCCall = (userId) => {
     setCallState(CALL_STATES.IDLE);
   }, []);
 
+  // ─── Screen Share ────────────────────────────────────────────────────────────
+  const startScreenShare = useCallback(async () => {
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      screenShareStreamRef.current = display;
+      const screenTrack = display.getVideoTracks()[0];
+      const pc = pcRef.current;
+      if (pc) {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(screenTrack);
+      }
+      setIsScreenSharing(true);
+      screenTrack.onended = () => stopScreenShare();
+    } catch (e) {
+      console.warn('[WebRTC] Screen share error:', e.message);
+    }
+  }, []); // eslint-disable-line
+
+  const stopScreenShare = useCallback(async () => {
+    const pc = pcRef.current;
+    const localVideoTrack = localStream?.getVideoTracks()[0];
+    if (pc && localVideoTrack) {
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(localVideoTrack).catch(() => {});
+    }
+    screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
+    screenShareStreamRef.current = null;
+    setIsScreenSharing(false);
+  }, [localStream]);
+
+  const toggleScreenShare = useCallback(() => {
+    if (isScreenSharing) stopScreenShare(); else startScreenShare();
+  }, [isScreenSharing, startScreenShare, stopScreenShare]);
+
+  // ─── Call Recording ───────────────────────────────────────────────────────────
+  const startCallRecording = useCallback(() => {
+    if (!remoteStream) return;
+    const tracks = [...(remoteStream.getTracks()), ...(localStream?.getAudioTracks() || [])];
+    const combined = new MediaStream(tracks);
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+    const mr = new MediaRecorder(combined, { mimeType });
+    recordingChunksRef.current = [];
+    mr.ondataavailable = (e) => { if (e.data.size > 0) recordingChunksRef.current.push(e.data); };
+    mr.onstop = () => {
+      const blob = new Blob(recordingChunksRef.current, { type: mimeType });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `call-${Date.now()}.webm`; a.click();
+      URL.revokeObjectURL(url);
+    };
+    mr.start(1000);
+    mediaRecorderRef.current = mr;
+    setIsRecordingCall(true);
+  }, [remoteStream, localStream]);
+
+  const stopCallRecording = useCallback(() => {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+    setIsRecordingCall(false);
+  }, []);
+
+  const toggleCallRecording = useCallback(() => {
+    if (isRecordingCall) stopCallRecording(); else startCallRecording();
+  }, [isRecordingCall, startCallRecording, stopCallRecording]);
+
   // ─── PUBLIC: End active call ─────────────────────────────────────────────────
   const endCall = useCallback(async () => {
     await _cleanupAndReset(true);
@@ -385,5 +456,11 @@ export const useWebRTCCall = (userId) => {
     endCall,
     toggleVideo,
     toggleAudio,
+    // Screen share
+    isScreenSharing,
+    toggleScreenShare,
+    // Call recording
+    isRecordingCall,
+    toggleCallRecording,
   };
 };
