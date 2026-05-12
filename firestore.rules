@@ -73,5 +73,18 @@ service cloud.firestore {
     match /userPreferences/{userId} {
       allow read, write: if isAuth() && request.auth.uid == userId;
     }
+
+    // 10. Communities
+    match /communities/{communityId} {
+      allow read, write: if isAuth();
+
+      match /channels/{channelId} {
+        allow read, write: if isAuth();
+
+        match /messages/{messageId} {
+          allow read, write: if isAuth();
+        }
+      }
+    }
   }
 }
