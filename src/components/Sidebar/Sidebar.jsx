@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { logout } from '../../config/firebase';
 import { toast } from 'react-toastify';
 import StatusTab from '../Status/StatusTab';
+import CommunitiesTab from '../Communities/CommunitiesTab';
+import CommunityView from '../Communities/CommunityView';
 
 import {
   collection,
@@ -39,7 +41,8 @@ const Sidebar = () => {
 
   const navigate = useNavigate();
   const [searchResults, setSearchResults] = useState(null);
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ls-tab') || 'chats'); // 'chats' | 'rooms' | 'status'
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ls-tab') || 'chats'); // 'chats' | 'rooms' | 'status' | 'communities'
+  const [selectedCommunity, setSelectedCommunity] = useState(null);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [roomSearch, setRoomSearch] = useState('');
@@ -289,6 +292,9 @@ const Sidebar = () => {
                 <button onClick={() => { setShowMenu(false); navigate('/settings'); }} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-2">
                   <span>⚙️</span> Settings
                 </button>
+                <button onClick={() => { setShowMenu(false); navigate('/analytics'); }} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-2">
+                  <span>📊</span> Analytics
+                </button>
                 <div className="border-t border-slate-700 my-1"></div>
                 <button onClick={() => logout()} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-red-400 transition-colors flex items-center gap-2">
                   <span>🚪</span> Logout
@@ -299,25 +305,23 @@ const Sidebar = () => {
         </div>
 
         {/* Tabs */}
-        <div className="flex bg-slate-800/50 p-1 rounded-lg mb-4 gap-1">
+        <div className="flex bg-slate-800/50 p-1 rounded-lg mb-4 gap-1 overflow-x-auto">
           <button
-            className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'chats' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${activeTab === 'chats' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
             onClick={() => { setActiveTab('chats'); localStorage.setItem('ls-tab', 'chats'); }}
-          >
-            Chats
-          </button>
+          >Chats</button>
           <button
-            className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'rooms' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${activeTab === 'rooms' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
             onClick={() => { setActiveTab('rooms'); localStorage.setItem('ls-tab', 'rooms'); }}
-          >
-            Rooms
-          </button>
+          >Rooms</button>
           <button
-            className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'status' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${activeTab === 'communities' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
+            onClick={() => { setActiveTab('communities'); localStorage.setItem('ls-tab', 'communities'); setSelectedCommunity(null); }}
+          >🏘️</button>
+          <button
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${activeTab === 'status' ? 'bg-indigo-600 shadow text-white' : 'text-slate-400 hover:text-white'}`}
             onClick={() => { setActiveTab('status'); localStorage.setItem('ls-tab', 'status'); }}
-          >
-            Status
-          </button>
+          >Status</button>
         </div>
 
         {/* Search */}
@@ -342,7 +346,11 @@ const Sidebar = () => {
 
       {/* List Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
-        {activeTab === 'status' ? (
+        {activeTab === 'communities' ? (
+          selectedCommunity
+            ? <CommunityView community={selectedCommunity} onBack={() => setSelectedCommunity(null)} />
+            : <CommunitiesTab onSelectCommunity={setSelectedCommunity} />
+        ) : activeTab === 'status' ? (
           <StatusTab />
         ) : activeTab === 'chats' ? (
           <>

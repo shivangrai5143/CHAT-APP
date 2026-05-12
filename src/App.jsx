@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from "react";
+import React, { useContext, useEffect, lazy, Suspense } from "react";
 import { Route, Routes, useNavigate } from "react-router-dom";
 import Login from "./pages/Login/Login";
 import Chat from "./pages/Chat/Chat";
@@ -12,6 +12,15 @@ import CallOverlay from "./components/Call/CallOverlay";
 import IncomingCallModal from "./components/Call/IncomingCallModal";
 import { CALL_STATES } from "./hooks/useCallStateManager";
 import SettingsPage from "./pages/Settings/SettingsPage";
+
+// Lazy-loaded heavy pages
+const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
+
+const PageLoader = () => (
+  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+    <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const App = () => {
   const navigate = useNavigate();
@@ -60,10 +69,11 @@ const App = () => {
       <ToastContainer />
 
       <Routes>
-        <Route path="/"        element={<Login />} />
-        <Route path="/chat"    element={<Chat />} />
-        <Route path="/profile" element={<ProfileUpdate />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/"          element={<Login />} />
+        <Route path="/chat"      element={<Chat />} />
+        <Route path="/profile"   element={<ProfileUpdate />} />
+        <Route path="/settings"  element={<SettingsPage />} />
+        <Route path="/analytics" element={<Suspense fallback={<PageLoader />}><AdminDashboard /></Suspense>} />
       </Routes>
 
       {/* ── Incoming call notification ── */}
