@@ -1,6 +1,11 @@
 /**
  * aiService.js
- * Gemini 1.5 Flash integration — smart replies, summarization, translation.
+ * Gemini 1.5 Flash integration:
+ *   - Smart replies
+ *   - Chat summarization
+ *   - Real-time translation
+ *   - Voice note transcription  ← NEW
+ *   - Semantic message search   ← NEW
  *
  * Setup: Add VITE_GEMINI_API_KEY=your_key_here to your .env file.
  */
@@ -8,6 +13,8 @@
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const BASE_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const PRO_URL =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent';
 
 // ─── Core request helper ──────────────────────────────────────────────────────
 
@@ -132,4 +139,125 @@ export const translateText = async (text, targetLang = 'en') => {
 Text: ${text}`;
 
   return callGemini(prompt, 0.3, 256);
+};
+
+// ─── Voice Note Transcription ─────────────────────────────────────────────────
+
+/**
+ * Transcribe an audio Blob to text using Gemini multimodal.
+ * @param {Blob} audioBlob — webm/opus/mp4 audio blob
+ * @returns {Promise<string|null>}
+ */
+export const transcribeVoiceNote = async (audioBlob) => {
+  if (!API_KEY || !audioBlob) return null;
+  try {
+    // Convert blob to base64
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    bytes.forEach((b) => (binary += String.fromCharCode(b)));
+    const base64 = window.btoa(binary);
+
+    const mimeType = audioBlob.type || 'audio/webm';
+
+    const body = {
+      contents: [{
+        parts: [
+          { text: 'Transcribe the following audio accurately. Return ONLY the transcription text, nothing else.' },
+          { inline_data: { mime_type: mimeType, data: base64 } },
+        ],
+      }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
+    };
+
+    const res = await fetch(`${PRO_URL}?key=${API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
+  } catch (e) {
+    console.warn('[AI] Voice transcription error:', e);
+    return null;
+  }
+};
+
+// ─── Semantic Message Search ──────────────────────────────────────────────────
+
+/**
+ * Find messages relevant to a natural-language query.
+ * Runs fully client-side — messages are already decrypted in memory.
+ *
+ * @param {string} query — e.g. "where we discussed deployment"
+ * @param {{ id: string, text: string, senderName: string }[]} messages
+ * @returns {Promise<string[]>} — array of matching message IDs
+ */
+export const semanticSearch = async (query, messages) => {
+  if (!API_KEY || !query?.trim() || !messages?.length) return [];
+
+  // Build a compact message list for Gemini
+  const msgList = messages
+    .filter((m) => m.text?.trim())
+    .slice(-200) // cap to last 200 messages
+    .map((m, i) => `[${i}|${m.id}] ${m.senderName}: ${m.text}`)
+    .join('\n');
+
+  if (!msgList) return [];
+
+  const prompt = `You are a semantic search engine for a chat conversation.
+Given the following messages (format: [index|id] sender: text), return the IDs of messages that are semantically relevant to the search query.
+
+Search Query: "${query}"
+
+Messages:
+${msgList}
+
+Return ONLY a JSON array of matching message IDs (the part after the pipe |). If no messages match, return []. No explanation.
+Example: ["abc123", "def456"]`;
+
+  try {
+    const raw = await callGemini(prompt, 0.1, 256);
+    if (!raw) return [];
+    const match = raw.match(/\[[\s\S]*\]/);
+    const parsed = match ? JSON.parse(match[0]) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn('[AI] Semantic search error:', e);
+    return [];
+  }
+};
+
+// ─── Conversation Insights ────────────────────────────────────────────────────
+
+/**
+ * Generate AI-powered conversation insights.
+ * @param {{ senderName: string, text: string }[]} messages
+ * @returns {Promise<string|null>}
+ */
+export const getConversationInsights = async (messages) => {
+  if (!messages?.length) return null;
+
+  const convo = messages
+    .slice(-80)
+    .filter((m) => m.text)
+    .map((m) => `${m.senderName}: ${m.text}`)
+    .join('\n');
+
+  if (!convo.trim()) return null;
+
+  const prompt = `Analyze this chat conversation and provide:
+1. 🎯 Main topics discussed
+2. 😊 Overall tone/sentiment
+3. ⚡ Key action items or decisions made
+4. 💡 Notable insights
+
+Conversation:
+${convo}
+
+Be concise and use bullet points.`;
+
+  return callGemini(prompt, 0.4, 500);
 };

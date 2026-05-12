@@ -34,6 +34,7 @@ const Sidebar = () => {
     roomData,
     setRoomData,
     rooms,
+    getUserPresenceStatus,
   } = useContext(AppContext);
 
   const navigate = useNavigate();
@@ -237,6 +238,20 @@ const Sidebar = () => {
 
   const isOnline = (lastSeen) => lastSeen && Date.now() - lastSeen < 70000;
 
+  const getPresenceDotClass = (user) => {
+    if (!getUserPresenceStatus) return 'bg-slate-600';
+    const status = getUserPresenceStatus(user);
+    if (status === 'online') return 'bg-green-500';
+    if (status === 'away')   return 'bg-yellow-400';
+    return 'bg-slate-600';
+  };
+
+  const getPresenceDotVisible = (user) => {
+    if (!user) return false;
+    const status = getUserPresenceStatus ? getUserPresenceStatus(user) : null;
+    return status === 'online' || status === 'away';
+  };
+
   const formatChatTime = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -337,7 +352,7 @@ const Sidebar = () => {
                   <div key={user.id} className="flex items-center gap-3 p-3 mx-2 my-1 hover:bg-slate-800 rounded-xl cursor-pointer transition-colors" onClick={() => setChat(user)}>
                     <div className="relative">
                       <img src={user.avatar || assets.profile_img} className="w-12 h-12 rounded-full object-cover" alt="" />
-                      {isOnline(user.lastSeen) && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full"></span>}
+                      {getPresenceDotVisible(user) && <span className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-slate-900 rounded-full ${getPresenceDotClass(user)}`} />}
                     </div>
                     <div className="flex-1 overflow-hidden">
                       <p className="font-semibold text-slate-200 truncate">{user.name || user.username}</p>
@@ -358,7 +373,7 @@ const Sidebar = () => {
                   >
                     <div className="relative">
                       <img src={item.userData?.avatar || assets.profile_img} className="w-12 h-12 rounded-full object-cover" alt="" />
-                      {isOnline(item.userData?.lastSeen) && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full"></span>}
+                      {getPresenceDotVisible(item.userData) && <span className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-slate-900 rounded-full ${getPresenceDotClass(item.userData)}`} />}
                     </div>
                     <div className="flex-1 overflow-hidden flex flex-col justify-center">
                       <div className="flex justify-between items-baseline mb-0.5">

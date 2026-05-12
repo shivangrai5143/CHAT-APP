@@ -106,6 +106,54 @@ export const encryptMessage = async (plaintext, recipientPublicKey, senderPublic
   };
 };
 
+/**
+ * Multi-device encryption: encrypt one AES key for every registered device.
+ *
+ * @param {string} plaintext
+ * @param {{ [deviceId: string]: JsonWebKey }} devicePublicKeys
+ *   — merged map of ALL devices that should be able to decrypt
+ *     (both recipient devices and sender's own devices)
+ * @returns {Promise<{ encryptedMessage, iv, deviceKeys, e2ee }>}
+ */
+export const encryptMessageMultiDevice = async (plaintext, devicePublicKeys) => {
+  // 1. One-time AES-256-GCM key
+  const aesKey = await window.crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+  );
+
+  // 2. Encrypt plaintext
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const encryptedBuffer = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    aesKey,
+    new TextEncoder().encode(plaintext)
+  );
+
+  // 3. Export raw AES bytes for wrapping
+  const rawAesKey = await window.crypto.subtle.exportKey('raw', aesKey);
+
+  // 4. Wrap AES key once per device
+  const deviceKeys = {};
+  for (const [deviceId, jwk] of Object.entries(devicePublicKeys)) {
+    try {
+      const pubKey = await importPublicKey(jwk);
+      const encBuf = await window.crypto.subtle.encrypt(
+        { name: 'RSA-OAEP' }, pubKey, rawAesKey
+      );
+      deviceKeys[deviceId] = bufferToBase64(encBuf);
+    } catch (e) {
+      console.warn(`[E2EE] Could not wrap key for device ${deviceId.slice(0, 8)}:`, e.message);
+    }
+  }
+
+  return {
+    encryptedMessage: bufferToBase64(encryptedBuffer),
+    iv: bufferToBase64(iv),
+    deviceKeys,
+    e2ee: true,
+  };
+};
+
 // ─── Message Decryption ───────────────────────────────────────────────────────
 
 /**

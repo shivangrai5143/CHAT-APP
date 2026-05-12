@@ -8,6 +8,23 @@ const DB_NAME = 'chatapp-e2ee';
 const DB_VERSION = 1;
 const STORE_NAME = 'privateKeys';
 
+// ─── Device Identity ──────────────────────────────────────────────────────────
+
+/**
+ * Returns a stable unique ID for this browser/device.
+ * Stored in localStorage so it survives page refreshes.
+ * Each new browser profile / incognito session gets its own ID.
+ */
+export const getDeviceId = () => {
+  const KEY = 'chatapp:deviceId';
+  let id = localStorage.getItem(KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(KEY, id);
+  }
+  return id;
+};
+
 // ─── DB Initialisation ────────────────────────────────────────────────────────
 
 let dbPromise = null;

@@ -18,11 +18,12 @@ import {
 import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { generateKeyPair, exportPublicKey } from "../services/cryptoService";
-import { getPrivateKey, savePrivateKey } from "../services/keyManager";
+import { getPrivateKey, savePrivateKey, getDeviceId } from "../services/keyManager";
 import { useWebRTCCall } from "../hooks/useWebRTCCall";
 import { CALL_STATES } from "../hooks/useCallStateManager";
 import { SignalingService } from "../services/signalingService";
 import { useTheme } from "../hooks/useTheme";
+import { usePresence } from "../hooks/usePresence";
 
 export const AppContext = createContext();
 
@@ -41,6 +42,7 @@ const AppContextProvider = ({ children }) => {
   const [typingUsers, setTypingUsers] = useState({}); // { chatId: { uid: timestamp } }
   const [statuses, setStatuses] = useState([]); // active status updates
   const [userPrivateKey, setUserPrivateKey] = useState(null); // RSA CryptoKey
+  const [myDeviceId,     setMyDeviceId]     = useState(() => getDeviceId()); // stable per-browser ID
   const userDataRef = useRef(null);
   const tabFocusedRef = useRef(true);
 
@@ -54,6 +56,16 @@ const AppContextProvider = ({ children }) => {
 
   // ─── Theme / Wallpaper ───
   const themeManager = useTheme(userData?.uid);
+
+  // ─── Presence status helper ───
+  // Determines display status from lastSeen + presenceStatus field
+  const getUserPresenceStatus = useCallback((user) => {
+    if (!user) return 'offline';
+    const now = Date.now();
+    const seen = user.lastSeen || 0;
+    if (now - seen < 70000) return user.presenceStatus || 'online';
+    return 'offline';
+  }, []);
 
   // Sync ref with state
   const setUserData = useCallback((valueOrUpdater) => {
@@ -104,42 +116,9 @@ const AppContextProvider = ({ children }) => {
     }
   };
 
-  // ─── Heartbeat: update lastSeen every 60s ───
-  useEffect(() => {
-    if (!userData?.uid) return;
-
-    const updateLastSeen = async () => {
-      try {
-        const userRef = doc(db, "users", userData.uid);
-        await updateDoc(userRef, { lastSeen: Date.now() });
-      } catch (e) {
-        console.log("Heartbeat error:", e);
-      }
-    };
-
-    updateLastSeen(); // fire immediately
-    const interval = setInterval(updateLastSeen, 60000);
-
-    return () => clearInterval(interval);
-  }, [userData?.uid]);
-
-  // ─── Visibility change: update lastSeen on tab focus/blur ───
-  useEffect(() => {
-    if (!userData?.uid) return;
-
-    const handleVisibility = async () => {
-      tabFocusedRef.current = !document.hidden;
-      try {
-        const userRef = doc(db, "users", userData.uid);
-        await updateDoc(userRef, { lastSeen: Date.now() });
-      } catch (e) {
-        console.log("Visibility update error:", e);
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [userData?.uid]);
+  // ─── Advanced Presence (replaces manual heartbeat + visibility handler) ───
+  // usePresence handles: online/away/offline, idle detection, tab focus, beforeunload
+  usePresence(userData?.uid);
 
   // ─── Real-time listener on chatUser's doc (for live online status) ───
   useEffect(() => {
@@ -288,21 +267,8 @@ const AppContextProvider = ({ children }) => {
     return () => unSubscribe();
   }, [messagesId, chatType]);
 
-  // ─── Update lastSeen on tab close ───
-  useEffect(() => {
-    const handleUnload = async () => {
-      if (!auth.currentUser) return;
-      try {
-        const userRef = doc(db, "users", auth.currentUser.uid);
-        await updateDoc(userRef, { lastSeen: Date.now() });
-      } catch (error) {
-        console.log("Error updating lastSeen:", error);
-      }
-    };
+  // beforeunload is now handled inside usePresence() — no duplicate needed here
 
-    window.addEventListener("beforeunload", handleUnload);
-    return () => window.removeEventListener("beforeunload", handleUnload);
-  }, []);
 
   // ─── Typing helpers ───
   const setTyping = async (chatId, isTyping) => {
@@ -384,62 +350,50 @@ const AppContextProvider = ({ children }) => {
   const initEncryption = useCallback(async (uid) => {
     if (!uid) return;
     try {
+      const deviceId = getDeviceId();
+      setMyDeviceId(deviceId);
       const userRef = doc(db, "users", uid);
 
-      // Helper: validate that the private key in IndexedDB matches
-      // the public key stored in Firestore by doing a test encrypt→decrypt.
+      // Validate existing private key against Firestore public key
       const validateKeyPair = async (privKey, publicJwk) => {
         try {
           const { importPublicKey, encryptMessage, decryptMessage } = await import('../services/cryptoService');
           const pubKey = await importPublicKey(publicJwk);
           const { encryptedMessage, encryptedAESKey, iv } = await encryptMessage('test', pubKey);
           await decryptMessage({ encryptedMessage, encryptedAESKey, iv }, privKey);
-          return true; // keys match
-        } catch {
-          return false; // mismatch — keys from different sessions
-        }
+          return true;
+        } catch { return false; }
       };
 
-      // Load existing private key from IndexedDB
       let privKey = await getPrivateKey(uid);
 
       if (privKey) {
-        // Verify it matches the public key currently in Firestore
-        const userSnap = await getDoc(userRef);
-        const firestorePublicJwk = userSnap.data()?.publicKey;
-
-        if (firestorePublicJwk) {
-          const isValid = await validateKeyPair(privKey, firestorePublicJwk);
-          if (isValid) {
-            // Keys match — use them as-is
-            setUserPrivateKey(privKey);
-            return;
-          }
-          // Keys don't match (e.g. Firestore was updated from another device)
-          console.warn('E2EE: Key mismatch detected — regenerating key pair');
-        } else {
-          // Firestore has no public key yet — re-upload ours
-          try {
-            const { exportPublicKey } = await import('../services/cryptoService');
-            // Re-derive public key from private key is not possible in WebCrypto;
-            // generate fresh pair instead.
-          } catch (_) {}
+        const userSnap   = await getDoc(userRef);
+        const deviceJwk  = userSnap.data()?.publicKeys?.[deviceId] ?? userSnap.data()?.publicKey;
+        if (deviceJwk) {
+          const isValid = await validateKeyPair(privKey, deviceJwk);
+          if (isValid) { setUserPrivateKey(privKey); return; }
+          console.warn('E2EE: Key mismatch — regenerating');
         }
       }
 
-      // Generate a fresh key pair (either no key existed or validation failed)
-      const keyPair = await generateKeyPair();
+      // Generate fresh key pair
+      const keyPair   = await generateKeyPair();
       const jwkPublic = await exportPublicKey(keyPair.publicKey);
-      // Overwrite public key in Firestore with the new one
-      await setDoc(userRef, { publicKey: jwkPublic }, { merge: true });
-      // Store new private key in IndexedDB (overwrites old one)
+
+      // Register under publicKeys.{deviceId} (multi-device) AND legacy publicKey field
+      await updateDoc(userRef, {
+        [`publicKeys.${deviceId}`]: jwkPublic,
+        publicKey: jwkPublic,
+      });
+
       await savePrivateKey(uid, keyPair.privateKey);
       setUserPrivateKey(keyPair.privateKey);
-      console.log('E2EE: New key pair generated and registered');
+      console.log(`[E2EE] New key pair registered for device ${deviceId.slice(0, 8)}`);
     } catch (e) {
       console.error("E2EE init error:", e);
     }
-  }, []);
+  }, []); // eslint-disable-line
 
   // ─── Status Listener (live, filtered to last 24h) ───
   useEffect(() => {
@@ -594,6 +548,8 @@ const AppContextProvider = ({ children }) => {
     userPrivateKey,
     setUserPrivateKey,
     initEncryption,
+    // ─── Presence ───
+    getUserPresenceStatus,
     // ─── Call system ───
     incomingCall,
     setIncomingCall,

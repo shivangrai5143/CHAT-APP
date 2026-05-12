@@ -18,7 +18,7 @@ import { db } from '../../config/firebase';
 import { toast } from 'react-toastify';
 import EmojiPicker from 'emoji-picker-react';
 import { encryptMessage, decryptMessage, importPublicKey } from '../../services/cryptoService';
-import { getSmartReplies, summarizeChat, translateText, SUPPORTED_LANGS } from '../../services/aiService';
+import { getSmartReplies, summarizeChat, translateText, SUPPORTED_LANGS, transcribeVoiceNote, semanticSearch, getConversationInsights } from '../../services/aiService';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import VoiceNotePlayer from './VoiceNotePlayer';
 
@@ -37,11 +37,12 @@ const ChatWindow = () => {
     isBlocked,
     isBlockedBy,
     userPrivateKey,
-    startCall,        // WebRTC
-    callState,        // WebRTC
-    wallpaperStyle,   // Theme
-    blur,             // Theme
-    opacity,          // Theme
+    startCall,              // WebRTC
+    callState,              // WebRTC
+    wallpaperStyle,         // Theme
+    blur,                   // Theme
+    opacity,                // Theme
+    getUserPresenceStatus,  // Presence
   } = useContext(AppContext);
 
   const [input, setInput] = useState('');
@@ -63,6 +64,14 @@ const ChatWindow = () => {
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [translatedMsgs, setTranslatedMsgs] = useState({});
   const [showDisappearPicker, setShowDisappearPicker] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [searchMode, setSearchMode] = useState('text'); // 'text' | 'ai'
+  const [aiSearchLoading, setAiSearchLoading] = useState(false);
+  const [aiSearchMatchIds, setAiSearchMatchIds] = useState(null); // null = not run
+  const [showInsightsModal, setShowInsightsModal] = useState(false);
+  const [insights, setInsights] = useState('');
+  const [isInsightsLoading, setIsInsightsLoading] = useState(false);
+  const [translatePickerMsg,  setTranslatePickerMsg]  = useState(null); // msgId with open lang picker
 
   // Voice recorder
   const { isRecording, audioBlob, audioUrl, duration, startRecording, stopRecording, cancelRecording, clearRecording } = useVoiceRecorder();
@@ -95,8 +104,11 @@ const ChatWindow = () => {
         encrypted.map(async (msg) => {
           try {
             const isSender = msg.sId === userData?.uid;
+            // Multi-device: prefer the key encrypted for this specific device
+            const encAESKey    = msg.deviceKeys?.[myDeviceId] ?? msg.encryptedAESKey;
+            const senderEncKey = msg.deviceKeys?.[myDeviceId] ?? msg.senderEncryptedAESKey;
             const plain = await decryptMessage(
-              { encryptedMessage: msg.encryptedMessage, encryptedAESKey: msg.encryptedAESKey, senderEncryptedAESKey: msg.senderEncryptedAESKey, iv: msg.iv },
+              { encryptedMessage: msg.encryptedMessage, encryptedAESKey: encAESKey, senderEncryptedAESKey: senderEncKey, iv: msg.iv },
               userPrivateKey,
               isSender
             );
@@ -203,24 +215,31 @@ const ChatWindow = () => {
 
       if (chatType === "user" && chatUser && userPrivateKey) {
         try {
+          // Multi-device: encrypt AES key for every registered device on both sides
           const recipientSnap = await getDoc(doc(db, "users", chatUser.uid));
-          const recipientJwk = recipientSnap.data()?.publicKey;
-          // Also get sender's own public key so they can decrypt their sent messages
+          const recipientData = recipientSnap.data() || {};
+          const recipientKeys = recipientData.publicKeys ||
+            (recipientData.publicKey ? { [chatUser.uid]: recipientData.publicKey } : {});
+
           const senderSnap = await getDoc(doc(db, "users", userData.uid));
-          const senderJwk = senderSnap.data()?.publicKey;
-          if (recipientJwk) {
-            const recipientPubKey = await importPublicKey(recipientJwk);
-            const senderPubKey = senderJwk ? await importPublicKey(senderJwk) : null;
-            const encrypted = await encryptMessage(messageText, recipientPubKey, senderPubKey);
-            msgData.encryptedMessage = encrypted.encryptedMessage;
-            msgData.encryptedAESKey = encrypted.encryptedAESKey;
-            if (encrypted.senderEncryptedAESKey) {
-              msgData.senderEncryptedAESKey = encrypted.senderEncryptedAESKey;
-            }
-            msgData.iv = encrypted.iv;
-            msgData.e2ee = true;
-          } else {
+          const senderData = senderSnap.data() || {};
+          const senderKeys = senderData.publicKeys ||
+            (senderData.publicKey ? { [myDeviceId]: senderData.publicKey } : {});
+
+          const allKeys = { ...recipientKeys, ...senderKeys };
+
+          if (Object.keys(allKeys).length === 0) {
             msgData.text = messageText;
+          } else {
+            const { encryptedMessage, iv, deviceKeys } = await encryptMessageMultiDevice(messageText, allKeys);
+            msgData.e2ee             = true;
+            msgData.encryptedMessage = encryptedMessage;
+            msgData.iv               = iv;
+            msgData.deviceKeys       = deviceKeys;
+            // Legacy compat fields so old clients can still decrypt
+            const recipientFirstKey = Object.keys(recipientKeys)[0];
+            msgData.encryptedAESKey       = deviceKeys[recipientFirstKey] ?? Object.values(deviceKeys)[0] ?? null;
+            msgData.senderEncryptedAESKey = deviceKeys[myDeviceId] ?? Object.values(deviceKeys)[0] ?? null;
           }
         } catch (cryptoErr) {
           console.error('Encryption error — falling back to plaintext:', cryptoErr);
@@ -320,10 +339,18 @@ const ChatWindow = () => {
     }
   };
 
-  // Send voice note
+  // Send voice note (with optional transcription)
   const sendVoiceNote = async () => {
     if (!audioBlob || !messagesId) return;
     try {
+      setIsTranscribing(true);
+      // Attempt transcription before uploading
+      let transcript = null;
+      if (import.meta.env.VITE_GEMINI_API_KEY) {
+        transcript = await transcribeVoiceNote(audioBlob).catch(() => null);
+      }
+      setIsTranscribing(false);
+
       const fd = new FormData();
       fd.append('file', audioBlob, 'voice.webm');
       fd.append('upload_preset', 'Chat_Images');
@@ -337,12 +364,14 @@ const ChatWindow = () => {
         status: 'sent',
         voiceUrl: data.secure_url,
         voiceDuration: duration,
+        ...(transcript ? { voiceTranscription: transcript } : {}),
         ...(chatType === 'room' ? { sName: userData.name || 'User', sAvatar: userData.avatar || '' } : {}),
       };
       await addDoc(collection(db, parentCollection, messagesId, 'messages'), msgData);
       if (chatType === 'user' && chatUser) await updateChatData('🎤 Voice message');
       clearRecording();
     } catch (err) {
+      setIsTranscribing(false);
       console.error('Voice send error:', err);
       toast.error('Failed to send voice note');
     }
@@ -356,6 +385,31 @@ const ChatWindow = () => {
     const summary = await summarizeChat(msgs).catch(() => 'Could not generate summary.');
     setChatSummary(summary || 'No content to summarize.');
     setIsSummarizing(false);
+  };
+
+  // AI Insights
+  const handleInsights = async () => {
+    setIsInsightsLoading(true);
+    setShowInsightsModal(true);
+    const msgs = messages.map((m) => ({ senderName: m.sName || (m.sId === userData?.uid ? 'Me' : chatUser?.name || 'Them'), text: m.text || decryptedTexts[m.id] || '' }));
+    const result = await getConversationInsights(msgs).catch(() => 'Could not generate insights.');
+    setInsights(result || 'No insights available.');
+    setIsInsightsLoading(false);
+  };
+
+  // AI Semantic Search
+  const handleAiSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setAiSearchLoading(true);
+    setAiSearchMatchIds(null);
+    const msgs = messages.map((m) => ({
+      id: m.id,
+      text: m.text || decryptedTexts[m.id] || '',
+      senderName: m.sName || (m.sId === userData?.uid ? 'Me' : chatUser?.name || 'Them'),
+    }));
+    const ids = await semanticSearch(searchQuery, msgs).catch(() => []);
+    setAiSearchMatchIds(ids);
+    setAiSearchLoading(false);
   };
 
   // Translate a message
@@ -484,6 +538,7 @@ const ChatWindow = () => {
   };
 
   const isOnline = (lastSeen) => lastSeen && Date.now() - lastSeen < 70000;
+  const isAway = (user) => getUserPresenceStatus && user ? getUserPresenceStatus(user) === 'away' : false;
 
   const onEmojiClick = (emojiData) => setInput((prev) => prev + emojiData.emoji);
 
@@ -514,8 +569,13 @@ const ChatWindow = () => {
     return msg.createdAt instanceof Timestamp ? msg.createdAt.toDate() : new Date(msg.createdAt);
   };
 
+  // Computed search results — supports both text and AI mode
+  const effectiveAiMatchIds = aiSearchMatchIds; // may be null (not searched) or []
   const searchResults = (showSearch && (searchQuery || searchDate))
     ? messages.map((msg, idx) => ({ msg, idx })).filter(({ msg }) => {
+        if (searchMode === 'ai' && effectiveAiMatchIds !== null) {
+          return effectiveAiMatchIds.includes(msg.id);
+        }
         let matchText = true;
         let matchDate = true;
         if (searchQuery) {
@@ -525,7 +585,6 @@ const ChatWindow = () => {
         if (searchDate) {
           const msgDate = getMessageDate(msg);
           if (msgDate) {
-            // Fix timezone issue with parsing YYYY-MM-DD
             const [year, month, day] = searchDate.split('-').map(Number);
             matchDate = msgDate.getFullYear() === year
               && msgDate.getMonth() === month - 1
@@ -604,9 +663,15 @@ const ChatWindow = () => {
               <h3 className="font-semibold text-slate-100 text-lg">{headerName}</h3>
               {chatType === "room" && <span className="text-xs bg-indigo-600/20 text-indigo-300 px-2 py-0.5 rounded-full">{roomData?.members?.length || 0} members</span>}
             </div>
-            {chatType === "user" && (
-              <p className={`text-sm ${isOnline(chatUser?.lastSeen) ? 'text-green-400' : 'text-slate-400'}`}>
-                {isOnline(chatUser?.lastSeen) ? 'Online' : lastSeenText}
+          {chatType === "user" && (
+              <p className={`text-sm font-medium ${
+                isOnline(chatUser?.lastSeen) ? 'text-green-400'
+                : isAway(chatUser) ? 'text-yellow-400'
+                : 'text-slate-400'
+              }`}>
+                {isOnline(chatUser?.lastSeen)
+                  ? (isAway(chatUser) ? '🌙 Away' : '🟢 Online')
+                  : lastSeenText}
               </p>
             )}
           </div>
@@ -662,6 +727,11 @@ const ChatWindow = () => {
                     <span>🤖</span> AI Summary
                   </button>
                 )}
+                {chatType === 'user' && (
+                  <button className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-3" onClick={() => { setShowOptionsMenu(false); handleInsights(); }}>
+                    <span>💡</span> AI Insights
+                  </button>
+                )}
                 <button className="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-3" onClick={() => { setShowDisappearPicker((v) => !v); }}>
                   <span>⏱</span> {disappearTimer > 0 ? `Disappear: ${disappearTimer}s` : 'Disappearing Msgs'}
                 </button>
@@ -688,20 +758,44 @@ const ChatWindow = () => {
       {/* Search Bar */}
       {showSearch && (
         <div className="relative z-20 bg-slate-800 border-b border-slate-700/50 p-3 flex flex-wrap items-center gap-3 shadow-inner">
+          {/* Mode Toggle */}
+          <div className="flex bg-slate-900 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+            <button
+              onClick={() => { setSearchMode('text'); setAiSearchMatchIds(null); }}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${searchMode === 'text' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >🔤 Text</button>
+            <button
+              onClick={() => setSearchMode('ai')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${searchMode === 'ai' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >🧠 AI</button>
+          </div>
           <input
             type="text"
-            placeholder="Search messages..."
+            placeholder={searchMode === 'ai' ? 'Ask anything... e.g. "deployment issues"' : 'Search messages...'}
             value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setSearchIndex(0); }}
+            onChange={(e) => { setSearchQuery(e.target.value); setSearchIndex(0); if (searchMode === 'text') setAiSearchMatchIds(null); }}
+            onKeyDown={(e) => searchMode === 'ai' && e.key === 'Enter' && handleAiSearch()}
             className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
             autoFocus
           />
-          <input
-            type="date"
-            value={searchDate}
-            onChange={(e) => { setSearchDate(e.target.value); setSearchIndex(0); }}
-            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-          />
+          {searchMode === 'text' && (
+            <input
+              type="date"
+              value={searchDate}
+              onChange={(e) => { setSearchDate(e.target.value); setSearchIndex(0); }}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+            />
+          )}
+          {searchMode === 'ai' && (
+            <button
+              onClick={handleAiSearch}
+              disabled={aiSearchLoading || !searchQuery.trim()}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs rounded-lg font-medium transition-colors flex items-center gap-1.5"
+            >
+              {aiSearchLoading ? <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> : '🔍'}
+              {aiSearchLoading ? 'Searching…' : 'Search'}
+            </button>
+          )}
           {(searchQuery || searchDate) && (
             <div className="flex items-center gap-2 text-sm text-slate-400">
               <span className="bg-slate-900 px-2 py-1 rounded">
@@ -713,7 +807,7 @@ const ChatWindow = () => {
               </div>
             </div>
           )}
-          <button className="p-1.5 text-slate-400 hover:text-white" onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchDate(''); }}>✕</button>
+          <button className="p-1.5 text-slate-400 hover:text-white" onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchDate(''); setAiSearchMatchIds(null); }}>✕</button>
         </div>
       )}
 
@@ -837,17 +931,47 @@ const ChatWindow = () => {
                     )}
                   </div>
 
-                  {/* Meta: Time, Receipt, Reply button */}
-                  <div className={`flex items-center gap-1 mt-1 text-[11px] text-slate-500 ${isSelf ? 'justify-end' : 'justify-start'}`}>
+                  {/* Meta: Time, Receipt, Reply + Translate buttons */}
+                  <div className={`flex items-center gap-1 mt-1 text-[11px] text-slate-500 ${isSelf ? 'justify-end' : 'justify-start'} relative`}>
                     <p>{formatTime(msg.createdAt)}</p>
                     {renderReceipt(msg)}
                     {msg.expiresAt && <span className="text-amber-500 ml-1">⏱</span>}
+                    {/* Reply */}
                     <button
                       className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-indigo-400"
                       title="Reply"
                       onClick={() => setReplyingTo({ id: msg.id, displayText: msg.text || decryptedTexts[msg.id] || '🎤 Voice note', senderName: isSelf ? (userData?.name || 'Me') : (chatUser?.name || msg.sName || 'User') })}
                     >↩</button>
+                    {/* Translate */}
+                    {(msg.text || decryptedTexts[msg.id]) && (
+                      <div className="relative">
+                        <button
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-emerald-400"
+                          title="Translate"
+                          onClick={() => setTranslatePickerMsg(translatePickerMsg === msg.id ? null : msg.id)}
+                        >🌐</button>
+                        {translatePickerMsg === msg.id && (
+                          <div className={`absolute bottom-6 ${isSelf ? 'right-0' : 'left-0'} z-30 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-2 flex flex-wrap gap-1 w-52`}>
+                            {[{c:'en',l:'English'},{c:'hi',l:'Hindi'},{c:'es',l:'Spanish'},{c:'fr',l:'French'},{c:'de',l:'German'},{c:'ja',l:'Japanese'},{c:'ar',l:'Arabic'},{c:'zh',l:'Chinese'}].map(({c,l}) => (
+                              <button key={c}
+                                className="text-[11px] px-2 py-1 rounded-lg bg-slate-700 hover:bg-indigo-600/60 text-slate-300 hover:text-white transition-colors"
+                                onClick={() => { handleTranslate(msg.id, msg.text || decryptedTexts[msg.id] || '', c); setTranslatePickerMsg(null); }}
+                              >{l}</button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Translated text */}
+                  {translatedMsgs[msg.id] && (
+                    <div className={`mt-1 px-3 py-1.5 rounded-xl text-xs italic border ${isSelf ? 'bg-indigo-900/30 border-indigo-700/30 text-indigo-200' : 'bg-slate-800/60 border-slate-700/40 text-slate-400'}`}>
+                      <span className="text-[10px] not-italic text-emerald-400 block mb-0.5">🌐 Translation</span>
+                      {translatedMsgs[msg.id]}
+                      <button className="ml-2 text-[10px] text-slate-500 hover:text-white" onClick={() => setTranslatedMsgs(p => { const n={...p}; delete n[msg.id]; return n; })}>✕</button>
+                    </div>
+                  )}
 
                 </div>
               </div>
@@ -880,6 +1004,29 @@ const ChatWindow = () => {
               <button className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium" onClick={() => setShowClearConfirm(false)}>Cancel</button>
               <button className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors font-medium shadow-lg shadow-red-500/20" onClick={clearChat}>Clear All</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Insights Modal */}
+      {showInsightsModal && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end justify-center sm:items-center">
+          <div className="bg-slate-800 border border-slate-700 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md mx-0 sm:mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">💡</span>
+                <h4 className="text-lg font-semibold text-white">Conversation Insights</h4>
+              </div>
+              <button onClick={() => setShowInsightsModal(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+            {isInsightsLoading ? (
+              <div className="flex items-center gap-3 py-4 text-slate-400">
+                <span className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                Analyzing conversation with Gemini...
+              </div>
+            ) : (
+              <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-line bg-slate-900/50 rounded-xl p-4">{insights}</div>
+            )}
           </div>
         </div>
       )}
